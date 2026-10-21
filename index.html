@@ -111,6 +111,34 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
 .status{font-size:13px;color:var(--torch);margin-top:8px;min-height:1.2em}
 .status.err{color:#ff8a76}
 .card .who{grid-column:2;font-size:11px;color:var(--torch)}
+#me .bag{font-size:12px;margin-top:4px;color:var(--ink)}
+#me .bag b{font-weight:400;color:var(--torch)}
+#pads{grid-template-columns:auto auto auto}
+#itm{width:54px;height:54px;font-size:13px;margin-bottom:6px}
+#itm[disabled]{opacity:.4}
+.pad .cnt{position:absolute;right:-4px;top:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--torch);color:#1a140f;font-size:11px;display:grid;place-items:center;padding:0 4px}
+.pad .cnt:empty{display:none}
+#pick{left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(calc(100% - 24px),760px);
+  pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;max-height:calc(100% - 120px);overflow-y:auto}
+.pickhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;font-size:17px}
+.picks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:620px){.picks{grid-template-columns:1fr}}
+.pc{font:inherit;color:var(--ink);text-align:left;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:5px;padding:10px 12px;cursor:pointer;
+  display:flex;flex-direction:column;gap:4px;min-width:0;--rc:var(--line)}
+.pc:hover,.pc:focus-visible{border-color:var(--rc);outline:none;background:rgba(0,0,0,.5)}
+.pc.r2{--rc:#6aa6e8;border-color:#3c5b80}
+.pc.r3{--rc:var(--torch);border-color:#8a6526;box-shadow:inset 0 0 18px rgba(226,162,67,.15)}
+.pc .tag{display:flex;gap:6px;font-size:11px;color:var(--muted)}
+.pc .tag .k{border:1px solid var(--line);border-radius:3px;padding:0 5px}
+.pc .tag .k.relic{color:#c9a2e8;border-color:#5b4470}
+.pc .tag .k.item{color:#8fe08a;border-color:#3e6a3b}
+.pc .tag .rr{color:var(--rc)}
+.pc .nm{font-size:16px}
+.pc .ds{font-size:12px;color:var(--muted);line-height:1.5}
+.pc .sw{font-size:11px;color:var(--torch)}
+.owned{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
+.gotlist{margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7}
+.gotlist b{font-weight:400;color:var(--ink)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -127,15 +155,23 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
     <div class="row"><span class="dot" id="hDot"></span><span id="hCls">剣士</span></div>
     <div class="hp"><i id="hHp"></i></div>
     <div class="num" id="hNum">HP 120 / 120</div>
+    <div class="bag" id="hBag">道具 なし</div>
   </div>
   <div id="banner" class="hud"></div>
   <div id="keys" class="hud panel" hidden>
-    移動 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 矢印　攻撃 <kbd>J</kbd> / <kbd>Space</kbd>（長押し可）　スキル <kbd>K</kbd><br>
+    移動 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 矢印　攻撃 <kbd>J</kbd> / <kbd>Space</kbd>（長押し可）　スキル <kbd>K</kbd>　道具 <kbd>L</kbd><br>
     画面左ドラッグでスティック操作も可
   </div>
   <div id="pads" class="hud" hidden>
+    <button class="pad" id="itm" aria-label="道具">道<span class="cnt" id="itmN"></span></button>
     <button class="pad" id="skl" aria-label="スキル">技</button>
     <button class="pad" id="atk" aria-label="攻撃">攻撃</button>
+  </div>
+
+  <div id="pick" class="hud" hidden>
+    <div class="pickhead"><span id="pickTitle">報酬を1つ選ぶ</span><span class="note" id="pickNote">1〜3キーでも選べます</span></div>
+    <div class="picks" id="picks"></div>
+    <div class="owned" id="owned"></div>
   </div>
 
   <div id="lobby" class="overlay">
@@ -182,6 +218,7 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
         <div><span>倒した敵</span><b id="rKills">0</b></div>
         <div><span>到達した部屋</span><b id="rRoom">1</b></div>
       </div>
+      <div class="gotlist" id="rGot"></div>
       <div class="actions" id="rActions">
         <button class="btn" id="again">同じ職業でもう一度</button>
         <button class="btn ghost" id="back">職業を選び直す</button>
@@ -216,37 +253,114 @@ const ENEMY={
   goblin:{name:'ゴブリン',r:15,hp:42,spd:118,touch:8},
   archer:{name:'骸骨弓兵',r:15,hp:34,spd:90,touch:6},
 };
-const ROOM_NAMES=['第一の間','第二の間','第三の間'];
+const P_A={x:300,y:230,w:64,h:64},P_B={x:836,y:230,w:64,h:64},P_C={x:300,y:506,w:64,h:64},P_D={x:836,y:506,w:64,h:64};
 const ROOMS=[
-  {pillars:[{x:300,y:230,w:64,h:64},{x:836,y:230,w:64,h:64},{x:300,y:506,w:64,h:64},{x:836,y:506,w:64,h:64}],
-   wave:[['slime',4]]},
-  {pillars:[{x:568,y:140,w:64,h:180},{x:568,y:480,w:64,h:180}],
-   wave:[['slime',3],['goblin',2]]},
-  {pillars:[{x:330,y:200,w:48,h:48},{x:330,y:552,w:48,h:48},{x:576,y:376,w:48,h:48},{x:822,y:200,w:48,h:48},{x:822,y:552,w:48,h:48}],
-   wave:[['goblin',2],['archer',2],['slime',2]]},
+  {name:'第一の間',pillars:[P_A,P_B,P_C,P_D],wave:[['slime',4]]},
+  {name:'第二の間',pillars:[{x:568,y:140,w:64,h:180},{x:568,y:480,w:64,h:180}],wave:[['slime',3],['goblin',2]]},
+  {name:'宝物庫',treasure:true,pillars:[{x:200,y:150,w:48,h:48},{x:952,y:150,w:48,h:48},{x:200,y:602,w:48,h:48},{x:952,y:602,w:48,h:48}],wave:[]},
+  {name:'第四の間',pillars:[{x:330,y:200,w:48,h:48},{x:330,y:552,w:48,h:48},{x:576,y:376,w:48,h:48},{x:822,y:200,w:48,h:48},{x:822,y:552,w:48,h:48}],wave:[['goblin',2],['archer',2],['slime',2]]},
+  {name:'第五の間',pillars:[{x:420,y:120,w:64,h:200},{x:716,y:480,w:64,h:200}],wave:[['goblin',3],['archer',3],['slime',3]]},
 ];
+
+// ---------- 強化・遺物・道具のカタログ ----------
+// kind: up=強化 / relic=遺物 / item=道具（1種類だけ持てる）  rar: 1普通 2レア 3伝説  stack: 重ねて取れる  coop: 2人以上のときだけ出る
+const CATALOG=[
+  // 共通強化
+  {id:'pow',kind:'up',rar:1,stack:1,name:'力の結晶',desc:'攻撃力 +15%'},
+  {id:'vit',kind:'up',rar:1,stack:1,name:'生命の実',desc:'最大HP +20（その分回復）'},
+  {id:'wind',kind:'up',rar:1,stack:1,name:'疾風の羽',desc:'移動速度 +10%'},
+  {id:'focus',kind:'up',rar:1,stack:1,name:'集中の印',desc:'スキルの待ち時間 −15%'},
+  {id:'light',kind:'up',rar:1,name:'身軽な鎧',desc:'被弾後の無敵時間 +0.3秒'},
+  {id:'rapid',kind:'up',rar:1,stack:1,name:'連撃の心得',desc:'通常攻撃の間隔 −12%'},
+  {id:'tough',kind:'up',rar:1,stack:1,name:'頑丈な体',desc:'受けるダメージ −10%'},
+  {id:'regen',kind:'up',rar:1,name:'再生の加護',desc:'部屋を制圧するたびHPを25%回復'},
+  {id:'crit',kind:'up',rar:1,stack:1,name:'弱点看破',desc:'10%の確率で会心（ダメージ2倍）'},
+  {id:'heavy',kind:'up',rar:1,stack:1,name:'重い一撃',desc:'敵を吹き飛ばす力 +40%'},
+  {id:'medic',kind:'up',rar:1,name:'手当ての心得',desc:'受ける回復量 +30%'},
+  {id:'bear',kind:'up',rar:2,name:'不屈',desc:'倒れるほどの攻撃を1度だけHP1で耐える'},
+  // 剣士
+  {id:'s_wide',cls:'sword',kind:'up',rar:1,name:'大振り',desc:'斬撃の範囲が広がる'},
+  {id:'s_twin',cls:'sword',kind:'up',rar:2,name:'二重回転',desc:'回転斬りがもう1回転する'},
+  {id:'s_drain',cls:'sword',kind:'up',rar:1,name:'吸命の刃',desc:'斬撃が当たるたびHP+1'},
+  {id:'s_dash',cls:'sword',kind:'up',rar:1,name:'突進斬り',desc:'踏み込みが長くなり、踏み込み中は無敵'},
+  {id:'s_wave',cls:'sword',kind:'up',rar:2,name:'剣気',desc:'斬撃と同時に短い衝撃波が飛ぶ'},
+  {id:'s_spin',cls:'sword',kind:'up',rar:1,name:'旋風の型',desc:'回転斬りの待ち時間 −30%'},
+  // 弓使い
+  {id:'a_double',cls:'archer',kind:'up',rar:2,name:'二連矢',desc:'矢が2本並んで飛ぶ'},
+  {id:'a_bounce',cls:'archer',kind:'up',rar:1,name:'跳弾',desc:'矢が壁で1回跳ね返る'},
+  {id:'a_five',cls:'archer',kind:'up',rar:1,name:'五方射ち',desc:'スキルの矢が5本になる'},
+  {id:'a_pierce',cls:'archer',kind:'up',rar:2,name:'貫き矢',desc:'通常の矢も敵を貫通する'},
+  {id:'a_long',cls:'archer',kind:'up',rar:1,name:'強弓',desc:'矢が速く、遠くまで届く'},
+  {id:'a_snipe',cls:'archer',kind:'up',rar:1,name:'狙い撃ち',desc:'遠くの敵ほどダメージが増える（最大1.5倍）'},
+  // 僧侶
+  {id:'p_mend',cls:'priest',kind:'up',rar:1,name:'癒しの光弾',desc:'光弾が仲間に当たるとHP+6',coop:1},
+  {id:'p_big',cls:'priest',kind:'up',rar:1,name:'大聖域',desc:'聖域の範囲 +40%'},
+  {id:'p_pray',cls:'priest',kind:'up',rar:1,name:'戦の祈り',desc:'聖域の中にいる味方の攻撃力 +25%'},
+  {id:'p_spread',cls:'priest',kind:'up',rar:2,name:'光弾拡散',desc:'光弾が3方向に飛ぶ'},
+  {id:'p_long',cls:'priest',kind:'up',rar:1,name:'長き祈り',desc:'聖域が2秒長く続く'},
+  {id:'p_pure',cls:'priest',kind:'up',rar:1,name:'浄化の光',desc:'聖域のダメージが2倍'},
+  // 協力強化
+  {id:'c_insp',kind:'up',rar:1,coop:1,name:'鼓舞',desc:'近くにいる仲間の攻撃力 +10%'},
+  {id:'c_rescue',kind:'up',rar:1,coop:1,name:'救命の手',desc:'仲間を蘇生する速さが2倍'},
+  {id:'c_last',kind:'up',rar:1,name:'最後の抵抗',desc:'倒れたとき周りの敵を吹き飛ばしダメージ30'},
+  {id:'c_share',kind:'up',rar:1,coop:1,name:'分かち合い',desc:'自分が回復すると、近くの仲間も半分回復'},
+  {id:'c_guard',kind:'up',rar:1,coop:1,name:'守護の誓い',desc:'近くにいる仲間の受けるダメージ −15%'},
+  {id:'c_combo',kind:'up',rar:1,coop:1,name:'連携攻撃',desc:'仲間が直前に攻撃した敵へのダメージ +25%'},
+  // 遺物
+  {id:'r_fire',kind:'relic',rar:1,name:'炎の指輪',desc:'攻撃が当たると20%で敵が燃える（3秒）'},
+  {id:'r_fang',kind:'relic',rar:1,name:'吸血の牙',desc:'敵を倒すとHP+4'},
+  {id:'r_thunder',kind:'relic',rar:2,name:'雷の護符',desc:'5回攻撃するごとに近くの敵へ落雷（15）'},
+  {id:'r_iron',kind:'relic',rar:2,name:'鉄の心臓',desc:'HPが半分以下のとき受けるダメージ半減'},
+  {id:'r_boots',kind:'relic',rar:1,name:'旅人の靴',desc:'移動中は通常攻撃の間隔 −20%'},
+  {id:'r_bond',kind:'relic',rar:1,coop:1,name:'絆のお守り',desc:'近くの仲間1人ごとに攻撃力 +8%'},
+  {id:'r_ice',kind:'relic',rar:1,name:'氷の欠片',desc:'攻撃が当たると15%で敵が1秒凍る'},
+  {id:'r_thorn',kind:'relic',rar:1,name:'棘の盾',desc:'体当たりしてきた敵に10ダメージ'},
+  {id:'r_reaper',kind:'relic',rar:3,name:'死神の鎌',desc:'HPが30%以下の敵は一撃で倒せる'},
+  {id:'r_coin',kind:'relic',rar:1,name:'幸運の金貨',desc:'レアや伝説の候補が出やすくなる'},
+  {id:'r_mask',kind:'relic',rar:2,name:'怒りの仮面',desc:'HPが減るほど攻撃力アップ（最大+50%）'},
+  {id:'r_feather',kind:'relic',rar:1,name:'守りの羽',desc:'各部屋で最初の1回の攻撃を防ぐ'},
+  {id:'r_orb',kind:'relic',rar:3,name:'爆裂の宝珠',desc:'倒した敵が爆発し、周りに20ダメージ'},
+  {id:'r_gear',kind:'relic',rar:1,name:'時の歯車',desc:'スキルを使うと2秒間 移動速度 +30%'},
+  {id:'r_eye',kind:'relic',rar:1,name:'鷹の目',desc:'攻撃の届く距離 +20%'},
+  // 道具（1種類だけ持てる。取り直すと入れ替え）
+  {id:'i_potion',kind:'item',rar:1,n:2,name:'回復薬',desc:'HPを最大値の50%回復（2回）'},
+  {id:'i_bomb',kind:'item',rar:1,n:3,name:'爆弾',desc:'前方に投げて爆発、周りに40ダメージ（3回）'},
+  {id:'i_smoke',kind:'item',rar:1,n:2,name:'煙玉',desc:'3秒間 敵から狙われなくなる（2回）'},
+  {id:'i_bell',kind:'item',rar:1,n:2,coop:1,name:'祝福の鐘',desc:'近くの仲間全員のHPを30回復（2回）'},
+  {id:'i_glass',kind:'item',rar:1,n:2,name:'時の砂時計',desc:'スキルの待ち時間をすぐ回復（2回）'},
+  {id:'i_scroll',kind:'item',rar:2,n:1,name:'雷鳴の巻物',desc:'周りの敵すべてに25ダメージ（1回）'},
+];
+const CAT={};for(const c of CATALOG)CAT[c.id]=c;
+const KIND_NAME={up:'強化',relic:'遺物',item:'道具'},RAR_NAME=['','','レア','伝説'];
 
 // ================= シミュレーション（ホストが計算する部分） =================
 // ここは描画・入力から切り離してあり、通信版ではホストだけがこれを動かして結果を配る
 function createSim(){
-  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,kills:0,eid:1,startT:0,endT:0,ev:[]};
+  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,kills:0,eid:1,startT:0,endT:0,ev:[]};
 }
 function addPlayer(S,id,cls){
   const c=CLASSES[cls];
-  S.players[id]={id,cls,x:0,y:0,vx:0,vy:0,ix:0,iy:0,r:16,fx:1,fy:0,hp:c.hp,max:c.hp,atkCd:0,skillCd:0,iframe:0,freeze:0,down:false,rev:0,qSkill:false};
+  S.players[id]={id,cls,x:0,y:0,vx:0,vy:0,ix:0,iy:0,r:16,fx:1,fy:0,hp:c.hp,max:c.hp,atkCd:0,skillCd:0,iframe:0,freeze:0,down:false,rev:0,qSkill:false,qItem:false,
+    ups:{},item:null,offer:null,shield:0,smoke:0,haste:0,bearUsed:false,atkN:0,pendSpin:0,dashT:0};
 }
+const has=(p,id)=>p.ups[id]||0;
+const nPlayers=S=>Object.keys(S.players).length;
 function startRun(S){
   S.phase='play';S.kills=0;S.startT=S.t;
-  for(const p of Object.values(S.players)){p.hp=p.max;p.down=false;p.rev=0}
+  for(const p of Object.values(S.players)){const c=CLASSES[p.cls];Object.assign(p,{hp:c.hp,max:c.hp,down:false,rev:0,ups:{},item:null,offer:null,bearUsed:false,atkN:0})}
   setupRoom(S,0);
 }
 function setupRoom(S,i){
-  S.room=i;S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.doorOpen=false;
+  const R=ROOMS[i];
+  S.room=i;S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.doorOpen=false;S.cleared=false;
+  S.chest=R.treasure?{x:W/2,y:H/2,open:false}:null;
   const ps=Object.values(S.players);
-  ps.forEach((p,k)=>{Object.assign(p,{x:WALL+56,y:H/2+(k-(ps.length-1)/2)*44,vx:0,vy:0,ix:0,iy:0,fx:1,fy:0,atkCd:0,skillCd:0,iframe:1});
+  ps.forEach((p,k)=>{Object.assign(p,{x:WALL+56,y:H/2+(k-(ps.length-1)/2)*44,vx:0,vy:0,ix:0,iy:0,fx:1,fy:0,atkCd:0,skillCd:0,iframe:1,smoke:0,haste:0,pendSpin:0,dashT:0});
+    p.shield=has(p,'r_feather')?1:0;
     if(p.down){p.down=false;p.hp=Math.round(p.max*.35);p.rev=0}});
+  const hpScale=(1+.12*i)*(1+.35*(ps.length-1));
   let n=0;
-  for(const[type,count]of ROOMS[i].wave)for(let j=0;j<count;j++){const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:1.1+n*.4});n++}
+  for(const[type,count]of R.wave)for(let j=0;j<count;j++){const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:1.1+n*.4,hpScale});n++}
   S.ev.push({k:'room',room:i});
 }
 function spawnPos(S){
@@ -268,63 +382,192 @@ function wallCollide(S,e){
 }
 const inWall=(S,x,y)=>x<WALL||y<WALL||x>W-WALL||y>H-WALL||ROOMS[S.room].pillars.some(q=>x>q.x&&x<q.x+q.w&&y>q.y&&y<q.y+q.h);
 function alivePlayers(S){return Object.values(S.players).filter(p=>!p.down)}
-function nearestPlayer(S,x,y){let b=null,bd=1e9;for(const p of alivePlayers(S)){const d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;b=p}}return b}
+function nearestPlayer(S,x,y){let b=null,bd=1e9;for(const p of alivePlayers(S)){if(p.smoke>0)continue;const d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;b=p}}return b}
+function alliesNear(S,p,r){return alivePlayers(S).filter(q=>q!==p&&Math.hypot(q.x-p.x,q.y-p.y)<r)}
 
-function damageEnemy(S,e,dmg,kx,ky,knock,by,color){
+// ---------- 強化の効果を数値にする ----------
+function atkMul(S,p){
+  let m=1+.15*has(p,'pow');
+  if(has(p,'r_mask'))m*=1+.5*(1-p.hp/p.max);
+  if(has(p,'r_bond'))m*=1+.08*alliesNear(S,p,170).length;
+  for(const q of alliesNear(S,p,160))if(has(q,'c_insp'))m*=1+.1;
+  for(const z of S.zones)if(z.pray&&Math.hypot(p.x-z.x,p.y-z.y)<z.r)m*=1.25;
+  return m;
+}
+const reach=p=>1+.2*has(p,'r_eye');
+const knockMul=p=>1+.4*has(p,'heavy');
+function speedOf(p){return CLASSES[p.cls].speed*(1+.1*Math.min(has(p,'wind'),4))*(p.haste>0?1.3:1)}
+function atkCdOf(p,moving){return CLASSES[p.cls].atkCd*Math.pow(.88,has(p,'rapid'))*(has(p,'r_boots')&&moving?.8:1)}
+function skillCdOf(p){return CLASSES[p.cls].skillCd*Math.pow(.85,has(p,'focus'))*(has(p,'s_spin')?.7:1)}
+
+function heal(S,p,amt,share=true){
+  if(p.down)return;
+  const h=Math.min(p.max-p.hp,Math.round(amt*(1+.3*has(p,'medic'))));
+  if(h>0){p.hp+=h;S.ev.push({k:'heal',x:p.x,y:p.y,amt:h})}
+  if(share&&has(p,'c_share'))for(const q of alliesNear(S,p,170))heal(S,q,amt/2,false);
+}
+
+// プレイヤーの攻撃によるダメージ（会心・連携・死神・付加効果をまとめて処理）
+function strike(S,p,e,base,kx,ky,knock,color,opt={}){
+  if(e.hp<=0)return false;
+  let dmg=base*atkMul(S,p)*(opt.mul||1);
+  if(has(p,'c_combo')&&e.lastBy&&e.lastBy!==p.id&&S.t-e.lastT<1.5)dmg*=1.25;
+  let crit=false;if(Math.random()<.1*has(p,'crit')){dmg*=2;crit=true}
+  dmg=Math.max(1,Math.round(dmg));
+  if(has(p,'r_reaper')&&e.hp/e.max<.3)dmg=Math.max(dmg,Math.ceil(e.hp));
+  e.lastBy=p.id;e.lastT=S.t;
+  const ok=damageEnemy(S,e,dmg,kx,ky,knock*knockMul(p),p.id,color,crit);
+  if(!ok||opt.noProc)return ok;
+  if(has(p,'r_fire')&&Math.random()<.2){e.burn=3;e.burnBy=p.id}
+  if(Math.random()<.15*has(p,'r_ice'))e.frozen=1;
+  if(e.hp<=0){
+    if(has(p,'r_fang'))heal(S,p,4);
+    if(has(p,'r_orb')){S.ev.push({k:'boom',x:e.x,y:e.y,r:80});for(const o of S.enemies)if(o!==e&&o.hp>0&&Math.hypot(o.x-e.x,o.y-e.y)<80+o.r){const d=Math.hypot(o.x-e.x,o.y-e.y)||1;strike(S,p,o,20,(o.x-e.x)/d,(o.y-e.y)/d,300,'#ffb060',{noProc:true})}}
+  }
+  return ok;
+}
+function damageEnemy(S,e,dmg,kx,ky,knock,by,color,crit=false){
   if(e.hp<=0)return false;
   e.hp-=dmg;e.flash=.1;e.freeze=.06;
   const kb=e.type==='slime'?1.25:1;e.kx+=kx*knock*kb;e.ky+=ky*knock*kb;
-  S.ev.push({k:'hit',x:e.x,y:e.y,kx,ky,dmg,color,by});
+  S.ev.push({k:'hit',x:e.x,y:e.y,kx,ky,dmg,color,by,crit});
   if(e.hp<=0){S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,by,type:e.type})}
   return true;
 }
-function hurtPlayer(S,p,dmg,kx,ky){
-  if(p.down||p.iframe>0)return;
-  p.hp=Math.max(0,p.hp-dmg);p.iframe=.75;p.ix+=kx*280;p.iy+=ky*280;
+function hurtPlayer(S,p,dmg,kx,ky,src){
+  if(p.down||p.iframe>0||p.dashT>0)return;
+  if(src&&has(p,'r_thorn')&&src.hp>0)damageEnemy(S,src,10,-kx,-ky,200,p.id,'#d9c79e');
+  if(p.shield>0){p.shield=0;p.iframe=.6;S.ev.push({k:'block',x:p.x,y:p.y,id:p.id});return}
+  let m=Math.max(.4,1-.1*has(p,'tough'));
+  if(has(p,'r_iron')&&p.hp<=p.max/2)m*=.5;
+  if(alliesNear(S,p,160).some(q=>has(q,'c_guard')))m*=.85;
+  dmg=Math.max(1,Math.round(dmg*m));
+  p.hp=Math.max(0,p.hp-dmg);p.iframe=.75+.3*has(p,'light');p.ix+=kx*280;p.iy+=ky*280;
   S.ev.push({k:'phit',id:p.id,x:p.x,y:p.y,dmg});
-  if(p.hp<=0){p.down=true;p.rev=0;S.ev.push({k:'down',id:p.id,x:p.x,y:p.y})}
+  if(p.hp<=0&&has(p,'bear')&&!p.bearUsed){p.hp=1;p.bearUsed=true;p.iframe=1.2;S.ev.push({k:'bear',id:p.id,x:p.x,y:p.y});return}
+  if(p.hp<=0){
+    p.down=true;p.rev=0;S.ev.push({k:'down',id:p.id,x:p.x,y:p.y});
+    if(has(p,'c_last')){S.ev.push({k:'boom',x:p.x,y:p.y,r:130});
+      for(const e of S.enemies){const d=Math.hypot(e.x-p.x,e.y-p.y)||1;if(d<130+e.r)strike(S,p,e,30,(e.x-p.x)/d,(e.y-p.y)/d,520,'#ffb060',{noProc:true})}}
+  }
 }
 function melee(S,p,range,arc,dmg,knock,color){
-  const ang=Math.atan2(p.fy,p.fx);let any=false;
+  const ang=Math.atan2(p.fy,p.fx);let hits=0;
   for(const e of S.enemies){if(e.hp<=0)continue;const dx=e.x-p.x,dy=e.y-p.y,dist=Math.hypot(dx,dy);
     if(dist>range+e.r)continue;
     const da=Math.abs(((Math.atan2(dy,dx)-ang)+Math.PI*3)%(Math.PI*2)-Math.PI);
     if(arc<Math.PI*2&&da>arc/2&&dist>e.r+p.r)continue;
-    if(damageEnemy(S,e,dmg,dist?dx/dist:p.fx,dist?dy/dist:p.fy,knock,p.id,color))any=true}
-  if(any)p.freeze=.05;
+    if(strike(S,p,e,dmg,dist?dx/dist:p.fx,dist?dy/dist:p.fy,knock,color))hits++}
+  if(hits){p.freeze=.05;if(has(p,'s_drain'))heal(S,p,Math.min(hits,3))}
 }
-function pShot(S,p,ang,o){S.shots.push({id:S.eid++,owner:'p',by:p.id,x:p.x+Math.cos(ang)*20,y:p.y+Math.sin(ang)*20,vx:Math.cos(ang)*o.speed,vy:Math.sin(ang)*o.speed,
-  r:o.r,dmg:o.dmg,knock:o.knock,life:o.life,kind:o.kind,pierce:!!o.pierce,hits:[]})}
-function attack(S,p){
-  const c=CLASSES[p.cls];p.atkCd=c.atkCd;const ang=Math.atan2(p.fy,p.fx);
-  if(p.cls==='sword'){S.ev.push({k:'arc',id:p.id,ang,arc:Math.PI*.62,r:66,color:c.color,life:.13});p.ix+=p.fx*150;p.iy+=p.fy*150;melee(S,p,66,Math.PI*.62,14,260,'#fff6e0')}
-  else if(p.cls==='archer'){pShot(S,p,ang,{speed:640,r:5,dmg:10,knock:140,life:.9,kind:'arrow'});p.ix-=p.fx*40;p.iy-=p.fy*40}
-  else pShot(S,p,ang,{speed:380,r:8,dmg:9,knock:110,life:.7,kind:'orb'});
+function pShot(S,p,ang,o,ox=0,oy=0){
+  const rc=reach(p);
+  S.shots.push({id:S.eid++,owner:'p',by:p.id,x:p.x+Math.cos(ang)*20+ox,y:p.y+Math.sin(ang)*20+oy,vx:Math.cos(ang)*o.speed,vy:Math.sin(ang)*o.speed,
+    r:o.r,dmg:o.dmg,knock:o.knock,life:o.life*rc,kind:o.kind,pierce:!!o.pierce,bounce:o.bounce||0,mend:!!o.mend,snipe:!!o.snipe,dist:0,hits:[]})
 }
+function attack(S,p,moving){
+  const c=CLASSES[p.cls];p.atkCd=atkCdOf(p,moving);const ang=Math.atan2(p.fy,p.fx);p.atkN++;
+  if(p.cls==='sword'){
+    const wide=has(p,'s_wide'),r=66*reach(p)*(wide?1.3:1),arc=Math.PI*.62*(wide?1.2:1);
+    S.ev.push({k:'arc',id:p.id,ang,arc,r,color:c.color,life:.13});
+    const lunge=has(p,'s_dash')?300:150;p.ix+=p.fx*lunge;p.iy+=p.fy*lunge;if(has(p,'s_dash'))p.dashT=.12;
+    melee(S,p,r,arc,14,260,'#fff6e0');
+    if(has(p,'s_wave'))pShot(S,p,ang,{speed:520,r:12,dmg:8,knock:120,life:.32,kind:'wave',pierce:true});
+  }else if(p.cls==='archer'){
+    const o={speed:640*(has(p,'a_long')?1.3:1),r:5,dmg:10,knock:140,life:.9*(has(p,'a_long')?1.4:1),kind:'arrow',pierce:!!has(p,'a_pierce'),bounce:has(p,'a_bounce')?1:0,snipe:!!has(p,'a_snipe')};
+    if(has(p,'a_double')){pShot(S,p,ang,o,-p.fy*7,p.fx*7);pShot(S,p,ang,o,p.fy*7,-p.fx*7)}else pShot(S,p,ang,o);
+    p.ix-=p.fx*40;p.iy-=p.fy*40;
+  }else{
+    const o={speed:380,r:8,dmg:9,knock:110,life:.7,kind:'orb',mend:!!has(p,'p_mend')};
+    if(has(p,'p_spread'))for(const a of[-.22,0,.22])pShot(S,p,ang+a,o);else pShot(S,p,ang,o);
+  }
+  if(has(p,'r_thunder')&&p.atkN%5===0){
+    let best=null,bd=230;for(const e of S.enemies){const d=Math.hypot(e.x-p.x,e.y-p.y);if(e.hp>0&&d<bd){bd=d;best=e}}
+    if(best){S.ev.push({k:'bolt',x:best.x,y:best.y});strike(S,p,best,15,0,0,0,'#cfe3ff',{noProc:true})}
+  }
+}
+function spin(S,p){const c=CLASSES[p.cls],r=86*reach(p);S.ev.push({k:'arc',id:p.id,ang:0,arc:Math.PI*2,r,color:c.color,life:.22});melee(S,p,r,Math.PI*2,22,400,'#fff6e0');S.ev.push({k:'shake',id:p.id,a:5})}
 function skill(S,p){
-  const c=CLASSES[p.cls];if(p.skillCd>0)return;p.skillCd=c.skillCd;const ang=Math.atan2(p.fy,p.fx);
-  if(p.cls==='sword'){S.ev.push({k:'arc',id:p.id,ang,arc:Math.PI*2,r:86,color:c.color,life:.22});melee(S,p,86,Math.PI*2,22,400,'#fff6e0');S.ev.push({k:'shake',id:p.id,a:5})}
-  else if(p.cls==='archer'){for(const o of[-.26,0,.26])pShot(S,p,ang+o,{speed:720,r:5,dmg:12,knock:160,life:.9,kind:'arrow',pierce:true});p.ix-=p.fx*90;p.iy-=p.fy*90}
-  else{S.zones.push({x:p.x,y:p.y,r:105,life:4,max:4,tick:0,by:p.id});S.ev.push({k:'burst',x:p.x,y:p.y,color:c.color,n:20})}
+  if(p.skillCd>0)return;p.skillCd=skillCdOf(p);const ang=Math.atan2(p.fy,p.fx);const c=CLASSES[p.cls];
+  if(has(p,'r_gear'))p.haste=2;
+  if(p.cls==='sword'){spin(S,p);if(has(p,'s_twin'))p.pendSpin=.22}
+  else if(p.cls==='archer'){
+    const spread=has(p,'a_five')?[-.5,-.25,0,.25,.5]:[-.26,0,.26];
+    for(const o of spread)pShot(S,p,ang+o,{speed:720*(has(p,'a_long')?1.3:1),r:5,dmg:12,knock:160,life:.9*(has(p,'a_long')?1.4:1),kind:'arrow',pierce:true,bounce:has(p,'a_bounce')?1:0,snipe:!!has(p,'a_snipe')});
+    p.ix-=p.fx*90;p.iy-=p.fy*90;
+  }else{
+    const life=4+(has(p,'p_long')?2:0);
+    S.zones.push({x:p.x,y:p.y,r:105*(has(p,'p_big')?1.4:1),life,max:life,tick:0,by:p.id,pray:!!has(p,'p_pray'),dmg:has(p,'p_pure')?12:6});
+    S.ev.push({k:'burst',x:p.x,y:p.y,color:c.color,n:20});
+  }
+}
+function useItem(S,p){
+  if(!p.item||p.item.n<=0)return;
+  const id=p.item.id;
+  if(id==='i_potion')heal(S,p,p.max*.5);
+  else if(id==='i_bomb'){const ang=Math.atan2(p.fy,p.fx);S.shots.push({id:S.eid++,owner:'p',by:p.id,x:p.x+p.fx*20,y:p.y+p.fy*20,vx:Math.cos(ang)*330,vy:Math.sin(ang)*330,r:8,dmg:0,knock:0,life:.5,kind:'bomb',pierce:false,bounce:0,dist:0,hits:[]})}
+  else if(id==='i_smoke'){p.smoke=3;S.ev.push({k:'smoke',x:p.x,y:p.y})}
+  else if(id==='i_bell'){S.ev.push({k:'bell',x:p.x,y:p.y});for(const q of alivePlayers(S))if(Math.hypot(q.x-p.x,q.y-p.y)<220)heal(S,q,30,false)}
+  else if(id==='i_glass'){p.skillCd=0;S.ev.push({k:'burst',x:p.x,y:p.y,color:'#cfe3ff',n:16})}
+  else if(id==='i_scroll'){for(const e of S.enemies)if(e.hp>0&&Math.hypot(e.x-p.x,e.y-p.y)<620){S.ev.push({k:'bolt',x:e.x,y:e.y});strike(S,p,e,25,0,0,0,'#cfe3ff',{noProc:true,mul:1/atkMul(S,p)})}}
+  p.item.n--;S.ev.push({k:'use',id:p.id,item:id});
+  if(p.item.n<=0)p.item=null;
+}
+function explodeBomb(S,s){
+  const p=S.players[s.by];S.ev.push({k:'boom',x:s.x,y:s.y,r:90});
+  for(const e of S.enemies){const d=Math.hypot(e.x-s.x,e.y-s.y)||1;if(e.hp>0&&d<90+e.r){
+    if(p)strike(S,p,e,40,(e.x-s.x)/d,(e.y-s.y)/d,420,'#ffb060',{noProc:true,mul:1/atkMul(S,p)});
+    else damageEnemy(S,e,40,(e.x-s.x)/d,(e.y-s.y)/d,420,s.by,'#ffb060')}}
+}
+
+// ---------- 3択の候補 ----------
+function makeOffer(S,p,relicOnly){
+  const luck=has(p,'r_coin'),multi=nPlayers(S)>1;
+  let pool=CATALOG.filter(c=>(!c.cls||c.cls===p.cls)&&(c.stack||!has(p,c.id))&&(!c.coop||multi)&&(!relicOnly||c.kind==='relic')&&!(p.item&&p.item.id===c.id));
+  const rw=[0,70,25+12*luck+(relicOnly?15:0),5+6*luck+(relicOnly?5:0)],kw={up:1,relic:1.3,item:1.6};
+  const out=[];
+  while(out.length<3&&pool.length){
+    const ws=pool.map(c=>rw[c.rar]*kw[c.kind]);let r=Math.random()*ws.reduce((a,b)=>a+b,0),i=0;
+    while(r>ws[i]){r-=ws[i];i++}
+    out.push(pool[i].id);pool.splice(i,1);
+  }
+  p.offer=out;
+}
+function chooseOffer(S,p,i){
+  if(!p||!p.offer||!p.offer[i])return;
+  const c=CAT[p.offer[i]];p.offer=null;
+  if(c.kind==='item')p.item={id:c.id,n:c.n};
+  else{p.ups[c.id]=(p.ups[c.id]||0)+1;
+    if(c.id==='vit'){p.max+=20;if(!p.down)p.hp+=20}
+    if(c.id==='r_feather')p.shield=1}
+  S.ev.push({k:'got',id:p.id,item:c.id});
 }
 
 function stepPlayer(S,p,inp,dt){
-  const c=CLASSES[p.cls];
   p.atkCd=Math.max(0,p.atkCd-dt);p.skillCd=Math.max(0,p.skillCd-dt);p.iframe=Math.max(0,p.iframe-dt);
-  if(inp.skill)p.qSkill=true;
-  if(p.down){p.vx=p.vy=p.ix=p.iy=0;p.qSkill=false;return}
+  p.smoke=Math.max(0,p.smoke-dt);p.haste=Math.max(0,p.haste-dt);p.dashT=Math.max(0,p.dashT-dt);
+  if(inp.skill)p.qSkill=true;if(inp.item)p.qItem=true;
+  if(p.down||p.offer){p.vx=p.vy=p.ix=p.iy=0;p.qSkill=p.qItem=false;return}
+  if(p.pendSpin>0){p.pendSpin-=dt;if(p.pendSpin<=0)spin(S,p)}
   const di=Math.exp(-dt*12);p.ix*=di;p.iy*=di;
   if(p.freeze>0){p.freeze-=dt;return}
   let mx=inp.mx||0,my=inp.my||0;const mag=Math.hypot(mx,my);if(mag>1){mx/=mag;my/=mag}
   if(mag>.15){const m=Math.hypot(mx,my);p.fx=mx/m;p.fy=my/m}
-  const a=1-Math.exp(-dt*18);p.vx+=(mx*c.speed-p.vx)*a;p.vy+=(my*c.speed-p.vy)*a;
+  const sp=speedOf(p),a=1-Math.exp(-dt*18);p.vx+=(mx*sp-p.vx)*a;p.vy+=(my*sp-p.vy)*a;
   p.x+=(p.vx+p.ix)*dt;p.y+=(p.vy+p.iy)*dt;wallCollide(S,p);
-  if(inp.atk&&p.atkCd<=0)attack(S,p);
+  if(inp.atk&&p.atkCd<=0)attack(S,p,mag>.15);
   if(p.qSkill){p.qSkill=false;skill(S,p)}
+  if(p.qItem){p.qItem=false;useItem(S,p)}
+  if(S.chest&&!S.chest.open&&Math.hypot(p.x-S.chest.x,p.y-S.chest.y)<44){
+    S.chest.open=true;S.ev.push({k:'chest',x:S.chest.x,y:S.chest.y});
+    for(const q of Object.values(S.players))makeOffer(S,q,true);
+  }
 }
 
 function stepEnemy(S,e,dt){
   e.flash=Math.max(0,e.flash-dt);const f=Math.exp(-dt*8);e.kx*=f;e.ky*=f;
+  if(e.burn>0){e.burn-=dt;e.burnT=(e.burnT||0)-dt;if(e.burnT<=0){e.burnT=.5;damageEnemy(S,e,2,0,0,0,e.burnBy,'#ffb060')}if(e.hp<=0)return}
+  if(e.frozen>0){e.frozen-=dt;e.x+=e.kx*dt;e.y+=e.ky*dt;wallCollide(S,e);return}
   e.cd-=dt;e.timer-=dt;
   if(e.freeze>0){e.freeze-=dt;return}
   const T=ENEMY[e.type],tgt=nearestPlayer(S,e.x,e.y);
@@ -340,7 +583,7 @@ function stepEnemy(S,e,dt){
   }else if(e.type==='archer'){
     if(e.state==='aim'){
       if(tgt&&e.timer>.25){e.ax=ux;e.ay=uy}
-      if(e.timer<=0){S.shots.push({id:S.eid++,owner:'e',x:e.x+e.ax*18,y:e.y+e.ay*18,vx:e.ax*390,vy:e.ay*390,r:5,dmg:12,life:1.6,kind:'earrow',hits:[]});e.state='walk';e.cd=2.2}
+      if(e.timer<=0){S.shots.push({id:S.eid++,owner:'e',x:e.x+e.ax*18,y:e.y+e.ay*18,vx:e.ax*390,vy:e.ay*390,r:5,dmg:12,life:1.6,kind:'earrow',bounce:0,dist:0,hits:[]});e.state='walk';e.cd=2.2}
     }else if(tgt){
       if(dist<230){mvx=-ux*T.spd;mvy=-uy*T.spd}
       else if(dist>340){mvx=ux*T.spd;mvy=uy*T.spd}
@@ -352,7 +595,7 @@ function stepEnemy(S,e,dt){
   e.x+=(mvx+e.kx)*dt;e.y+=(mvy+e.ky)*dt;wallCollide(S,e);
   if(e.type==='archer'&&Math.hypot(e.x-ox,e.y-oy)<(Math.hypot(mvx,mvy)*dt)*.3)e.dir*=-1;
   for(const p of alivePlayers(S)){const ddx=p.x-e.x,ddy=p.y-e.y,d=Math.hypot(ddx,ddy)||1;
-    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:T.touch;hurtPlayer(S,p,dmg,ddx/d,ddy/d)}}
+    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:T.touch;hurtPlayer(S,p,dmg,ddx/d,ddy/d,e)}}
 }
 
 function stepSim(S,inputs,dt){
@@ -362,52 +605,73 @@ function stepSim(S,inputs,dt){
 
   // 蘇生：倒れた仲間の近くに立ち続けると起き上がる
   for(const p of Object.values(S.players)){if(!p.down)continue;
-    const helper=alivePlayers(S).some(q=>Math.hypot(q.x-p.x,q.y-p.y)<52);
-    p.rev=helper?p.rev+dt/2:Math.max(0,p.rev-dt*.5);
+    const helpers=alivePlayers(S).filter(q=>Math.hypot(q.x-p.x,q.y-p.y)<52);
+    const rate=helpers.length?(helpers.some(q=>has(q,'c_rescue'))?2:1):0;
+    p.rev=rate?p.rev+dt/2*rate:Math.max(0,p.rev-dt*.5);
     if(p.rev>=1){p.down=false;p.rev=0;p.hp=Math.round(p.max*.35);p.iframe=1.2;S.ev.push({k:'revive',id:p.id,x:p.x,y:p.y})}}
 
-  for(const sp of S.spawns){sp.t-=dt;if(sp.t<=0){const T=ENEMY[sp.type];
-    S.enemies.push({id:S.eid++,type:sp.type,x:sp.x,y:sp.y,r:T.r,hp:T.hp,max:T.hp,kx:0,ky:0,flash:0,freeze:0,cd:1+Math.random(),timer:0,state:'walk',ax:1,ay:0,dir:Math.random()<.5?-1:1});
+  for(const sp of S.spawns){sp.t-=dt;if(sp.t<=0){const T=ENEMY[sp.type],hp=Math.round(T.hp*sp.hpScale);
+    S.enemies.push({id:S.eid++,type:sp.type,x:sp.x,y:sp.y,r:T.r,hp,max:hp,kx:0,ky:0,flash:0,freeze:0,frozen:0,burn:0,cd:1+Math.random(),timer:0,state:'walk',ax:1,ay:0,dir:Math.random()<.5?-1:1});
     S.ev.push({k:'spawn',x:sp.x,y:sp.y})}}
   S.spawns=S.spawns.filter(s=>s.t>0);
 
   for(const e of S.enemies)if(e.hp>0)stepEnemy(S,e,dt);
-  // 敵同士の押し合い
   for(let i=0;i<S.enemies.length;i++)for(let j=i+1;j<S.enemies.length;j++){const a=S.enemies[i],b=S.enemies[j];
     const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,o=a.r+b.r-d;if(o>0){a.x-=dx/d*o/2;a.y-=dy/d*o/2;b.x+=dx/d*o/2;b.y+=dy/d*o/2}}
 
   for(const s of S.shots){
-    s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt;
-    if(inWall(S,s.x,s.y)){s.life=0;S.ev.push({k:'spark',x:s.x,y:s.y,kx:-s.vx,ky:-s.vy});continue}
-    const v=Math.hypot(s.vx,s.vy);
-    if(s.owner==='p'){for(const e of S.enemies){if(e.hp<=0||s.hits.includes(e.id))continue;
-        if(Math.hypot(e.x-s.x,e.y-s.y)<e.r+s.r){s.hits.push(e.id);damageEnemy(S,e,s.dmg,s.vx/v,s.vy/v,s.knock,s.by,s.kind==='orb'?'#fff3b0':'#e8f5d8');if(!s.pierce){s.life=0;break}}}}
-    else{for(const p of alivePlayers(S)){if(Math.hypot(p.x-s.x,p.y-s.y)<p.r+s.r){if(p.iframe<=0)hurtPlayer(S,p,s.dmg,s.vx/v,s.vy/v);s.life=0;break}}}
+    const px=s.x,py=s.y;
+    s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt;s.dist+=Math.hypot(s.vx,s.vy)*dt;
+    if(inWall(S,s.x,s.y)){
+      if(s.bounce>0){s.bounce--;if(inWall(S,s.x,py))s.vx*=-1;if(inWall(S,px,s.y))s.vy*=-1;if(!inWall(S,s.x,py)&&!inWall(S,px,s.y)){s.vx*=-1;s.vy*=-1}s.x=px;s.y=py;s.hits=[];continue}
+      if(s.kind==='bomb')explodeBomb(S,s);else S.ev.push({k:'spark',x:s.x,y:s.y,kx:-s.vx,ky:-s.vy});
+      s.life=0;continue}
+    const v=Math.hypot(s.vx,s.vy)||1;
+    if(s.owner==='p'){
+      const p=S.players[s.by];
+      if(s.kind==='bomb'){if(s.life<=0||S.enemies.some(e=>e.hp>0&&Math.hypot(e.x-s.x,e.y-s.y)<e.r+s.r)){explodeBomb(S,s);s.life=0}continue}
+      if(s.mend)for(const q of alivePlayers(S)){if(q.id!==s.by&&q.hp<q.max&&Math.hypot(q.x-s.x,q.y-s.y)<q.r+s.r){heal(S,q,6,false);s.life=0;break}}
+      if(s.life<=0)continue;
+      for(const e of S.enemies){if(e.hp<=0||s.hits.includes(e.id))continue;
+        if(Math.hypot(e.x-s.x,e.y-s.y)<e.r+s.r){s.hits.push(e.id);
+          const mul=s.snipe?1+Math.min(.5,Math.max(0,(s.dist-150)/400)):1,col=s.kind==='orb'?'#fff3b0':'#e8f5d8';
+          if(p)strike(S,p,e,s.dmg,s.vx/v,s.vy/v,s.knock,col,{mul});else damageEnemy(S,e,s.dmg,s.vx/v,s.vy/v,s.knock,s.by,col);
+          if(!s.pierce){s.life=0;break}}}}
+    else{for(const p of alivePlayers(S)){if(Math.hypot(p.x-s.x,p.y-s.y)<p.r+s.r){if(p.iframe<=0&&p.dashT<=0)hurtPlayer(S,p,s.dmg,s.vx/v,s.vy/v);s.life=0;break}}}
   }
   S.shots=S.shots.filter(s=>s.life>0);
   S.enemies=S.enemies.filter(e=>e.hp>0);
 
   for(const z of S.zones){z.life-=dt;z.tick-=dt;
-    if(z.tick<=0){z.tick=.5;
-      for(const e of S.enemies)if(Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r)damageEnemy(S,e,6,0,0,0,z.by,'#fff3b0');
-      for(const p of alivePlayers(S))if(Math.hypot(p.x-z.x,p.y-z.y)<z.r+p.r&&p.hp<p.max){const h=Math.min(8,p.max-p.hp);p.hp+=h;S.ev.push({k:'heal',x:p.x,y:p.y,amt:h})}}}
+    if(z.tick<=0){z.tick=.5;const p=S.players[z.by];
+      for(const e of S.enemies)if(e.hp>0&&Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r){if(p)strike(S,p,e,z.dmg,0,0,0,'#fff3b0',{noProc:true});else damageEnemy(S,e,z.dmg,0,0,0,z.by,'#fff3b0')}
+      for(const q of alivePlayers(S))if(Math.hypot(q.x-z.x,q.y-z.y)<z.r+q.r&&q.hp<q.max)heal(S,q,8,false)}}
   S.zones=S.zones.filter(z=>z.life>0);
   S.enemies=S.enemies.filter(e=>e.hp>0);
 
-  if(!S.doorOpen&&!S.spawns.length&&!S.enemies.length){S.doorOpen=true;S.ev.push({k:'clear',room:S.room})}
+  const last=S.room>=ROOMS.length-1;
+  if(!S.cleared&&!S.spawns.length&&!S.enemies.length&&(!S.chest||S.chest.open)){
+    S.cleared=true;
+    if(!S.chest){
+      for(const p of Object.values(S.players))if(has(p,'regen'))heal(S,p,p.max*.25);
+      if(!last)for(const p of Object.values(S.players))makeOffer(S,p,false);
+    }
+    S.ev.push({k:'clear',room:S.room,last,treasure:!!S.chest});
+  }
+  if(S.cleared&&!S.doorOpen&&Object.values(S.players).every(p=>!p.offer)){
+    if(last){S.phase='win';S.endT=S.t;S.ev.push({k:'end',win:true});return}
+    S.doorOpen=true;S.ev.push({k:'door'});
+  }
   const alive=alivePlayers(S);
   if(!alive.length){S.phase='lose';S.endT=S.t;S.ev.push({k:'end',win:false});return}
-  if(S.doorOpen&&alive.every(p=>p.x>W-WALL-30&&Math.abs(p.y-H/2)<DOOR)){
-    if(S.room<ROOMS.length-1)setupRoom(S,S.room+1);
-    else{S.phase='win';S.endT=S.t;S.ev.push({k:'end',win:true})}
-  }
+  if(S.doorOpen&&alive.every(p=>p.x>W-WALL-30&&Math.abs(p.y-H/2)<DOOR))setupRoom(S,S.room+1);
 }
 
 // ================= クライアント（入力・描画・演出・通信） =================
 let MY='p1';
 let mode='solo';            // solo | host | client
 let S=createSim();let myCls='sword';
-const keys=new Set();let atkHeld=false,skillTap=false;
+const keys=new Set();let atkHeld=false,skillTap=false,itemTap=false;
 const joy={id:null,ox:0,oy:0,dx:0,dy:0};const JR=56;
 
 addEventListener('keydown',e=>{
@@ -416,6 +680,8 @@ addEventListener('keydown',e=>{
   if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)&&S.phase==='play')e.preventDefault();
   if(e.repeat&&keys.has(k))return;keys.add(k);
   if(k==='k'||k==='x'||k==='shift')skillTap=true;
+  if(k==='l'||k==='c')itemTap=true;
+  if(['1','2','3'].includes(k))choose(+k-1);
   if(k==='enter'&&!$('#lobby').hidden&&mode!=='client')start();
 });
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
@@ -433,12 +699,13 @@ atkB.addEventListener('pointerdown',e=>{e.preventDefault();atkHeld=true;atkB.cla
 const atkUp=()=>{atkHeld=false;atkB.classList.remove('on')};
 atkB.addEventListener('pointerup',atkUp);atkB.addEventListener('pointercancel',atkUp);
 sklB.addEventListener('pointerdown',e=>{e.preventDefault();skillTap=true});
+const itmB=$('#itm');itmB.addEventListener('pointerdown',e=>{e.preventDefault();itemTap=true});
 
 function readInput(){
   let mx=(keys.has('d')||keys.has('arrowright'))-(keys.has('a')||keys.has('arrowleft'));
   let my=(keys.has('s')||keys.has('arrowdown'))-(keys.has('w')||keys.has('arrowup'));
   if(joy.id!==null&&Math.hypot(joy.dx,joy.dy)>8){mx=joy.dx/JR;my=joy.dy/JR}
-  const inp={mx,my,atk:atkHeld||keys.has('j')||keys.has(' ')||keys.has('z'),skill:skillTap};skillTap=false;return inp;
+  const inp={mx,my,atk:atkHeld||keys.has('j')||keys.has(' ')||keys.has('z'),skill:skillTap,item:itemTap};skillTap=false;itemTap=false;return inp;
 }
 
 // ---------- 通信（PeerJS） ----------
@@ -446,7 +713,7 @@ function readInput(){
 // 参加者：入力を30回/秒で送り、届いた状態を補間して表示する
 const PREFIX='yonin-dungeon-';
 let peer=null,hostConn=null,conns={},members={},roomCode='';
-let netInputs={},lastSkillN={},mySkillN=0,sendAcc=0,snapAcc=0,evQueue=[];
+let netInputs={},lastSkillN={},lastItemN={},mySkillN=0,myItemN=0,sendAcc=0,snapAcc=0,evQueue=[];
 let snapA=null,snapB=null,tA=0,tB=0;
 let wakeLock=null;
 
@@ -500,12 +767,17 @@ function dropMember(id){
 function onHostData(id,d){
   if(!d||typeof d!=='object')return;
   if(d.t==='in')netInputs[id]=d;
+  else if(d.t==='choose'&&S.phase==='play')chooseOffer(S,S.players[id],d.i|0);
   else if(d.t==='pick'&&S.phase==='lobby'&&CLASSES[d.cls]){
     if(!Object.entries(members).some(([o,m])=>o!==id&&m.cls===d.cls))members[id].cls=d.cls;
     broadcastLobby();renderLobby();
   }
 }
-function send(conn,msg){try{if(conn&&conn.open)conn.send(msg)}catch(_){}}
+function send(conn,msg){
+  if(!conn)return;
+  try{if(conn.open)conn.send(msg);
+    else{if(!conn._q){conn._q=[];conn.on('open',()=>{const q=conn._q;conn._q=null;for(const m of q)try{conn.send(m)}catch(_){}})}conn._q.push(msg)}}catch(_){}
+}
 function broadcast(msg){for(const c of Object.values(conns))send(c,msg)}
 function broadcastLobby(show=false){broadcast({t:'lobby',members,show})}
 
@@ -557,14 +829,14 @@ function buildClientView(){
   const B=snapB,A=snapA&&snapA.room===B.room?snapA:null;
   const al=A?clamp((performance.now()-tB)/Math.max(16,tB-tA),0,1):1;
   const players={};for(const p of lerpList(A&&A.players,B.players,al))players[p.id]=p;
-  S={t:B.t,phase:B.phase,room:B.room,doorOpen:B.doorOpen,kills:B.kills,startT:B.startT,endT:B.endT,
+  S={t:B.t,phase:B.phase,room:B.room,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,kills:B.kills,startT:B.startT,endT:B.endT,
     players,enemies:lerpList(A&&A.enemies,B.enemies,al),shots:lerpList(A&&A.shots,B.shots,al),zones:B.zones,spawns:B.spawns,ev:[]};
 }
 const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
 function packState(S){
-  return{t:r1(S.t),phase:S.phase,room:S.room,doorOpen:S.doorOpen,kills:S.kills,startT:S.startT,endT:S.endT,
-    players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r})),
-    enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay)})),
+  return{t:r1(S.t),phase:S.phase,room:S.room,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,kills:S.kills,startT:S.startT,endT:S.endT,
+    players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r,ups:p.ups,item:p.item,offer:p.offer,smoke:r2(p.smoke),shield:p.shield,haste:r2(p.haste)})),
+    enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0})),
     shots:S.shots.map(s=>({id:s.id,x:r1(s.x),y:r1(s.y),vx:r1(s.vx),vy:r1(s.vy),kind:s.kind,owner:s.owner,r:s.r})),
     zones:S.zones.map(z=>({x:r1(z.x),y:r1(z.y),r:z.r,life:r2(z.life)})),
     spawns:S.spawns.map(s=>({x:r1(s.x),y:r1(s.y),t:r2(s.t)}))};
@@ -636,26 +908,27 @@ function start(){
   if(mode==='host')for(const[id,m]of Object.entries(members))addPlayer(S,id,m.cls);
   else addPlayer(S,MY,myCls);
   startRun(S);
-  netInputs={};lastSkillN={};evQueue=[];snapAcc=1;
-  parts=[];nums=[];arcs=[];shake=0;
+  netInputs={};lastSkillN={};lastItemN={};evQueue=[];snapAcc=1;pickSig='';
+  parts=[];nums=[];arcs=[];rings=[];shake=0;bagHtml='';
   $('#lobby').hidden=true;$('#result').hidden=true;showHud(true);cv.focus();setMeHud();
   if(mode==='host'&&navigator.wakeLock){navigator.wakeLock.request('screen').then(l=>wakeLock=l).catch(()=>{})}
   const evs=S.ev.splice(0);if(mode==='host')evQueue.push(...evs);handleEvents(evs);
 }
 
 // ---------- 演出 ----------
-let parts=[],nums=[],arcs=[],shake=0,bannerT=0,hurtFlash=0;
+let rings=[],parts=[],nums=[],arcs=[],shake=0,bannerT=0,hurtFlash=0;
 function burst(x,y,color,n,sp){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=sp*(.4+Math.random()*.6);
   parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.35+Math.random()*.25,max:.6,color,size:2+Math.random()*2})}}
 function sparks(x,y,kx,ky,color){const b=Math.atan2(ky,kx);for(let i=0;i<7;i++){const a=b+(Math.random()-.5)*1.4,s=180+Math.random()*220;
   parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.18+Math.random()*.15,max:.33,color,size:2+Math.random()*2})}}
 function num(x,y,t,color){nums.push({x:x+(Math.random()-.5)*12,y,t:String(t),color,life:.75,max:.75})}
+function toast(t){if(bannerT>0)return;banner(`<small>${t}</small>`,1.6)}
 function banner(html,sec=2){const b=$('#banner');b.innerHTML=html;b.classList.add('show');bannerT=sec}
 const ENEMY_DEATH={slime:'#6fb3c4',goblin:'#9aab45',archer:'#e2dccd'};
 function handleEvents(list){
   for(const v of list){
     switch(v.k){
-      case'hit':num(v.x,v.y-30,v.dmg,'#fff1d6');sparks(v.x,v.y,v.kx||0,v.ky||-1,v.color);if(v.by===MY)shake=Math.max(shake,3.5);break;
+      case'hit':if(v.crit){nums.push({x:v.x,y:v.y-34,t:v.dmg+'!',color:'#ffd36a',life:.9,max:.9,big:1})}else num(v.x,v.y-30,v.dmg,'#fff1d6');sparks(v.x,v.y,v.kx||0,v.ky||-1,v.color);if(v.by===MY)shake=Math.max(shake,3.5);break;
       case'kill':burst(v.x,v.y,ENEMY_DEATH[v.type]||'#c9a26a',22,260);if(v.by===MY)shake=Math.max(shake,8);break;
       case'phit':num(v.x,v.y-30,v.dmg,'#ff8a76');burst(v.x,v.y,'#c9483a',10,180);if(v.id===MY){shake=Math.max(shake,10);hurtFlash=.25}break;
       case'down':burst(v.x,v.y,'#888',18,200);
@@ -669,8 +942,18 @@ function handleEvents(list){
       case'spark':sparks(v.x,v.y,v.kx,v.ky,'#bfae8f');break;
       case'spawn':burst(v.x,v.y,'#7a2a3a',14,140);break;
       case'left':banner(`${slotName(v.id)}が退出しました`,2);break;
-      case'room':banner(`${ROOM_NAMES[v.room]}<small>敵を全滅させよう</small>`,1.8);break;
-      case'clear':banner(`制圧！<small>${Object.keys(S.players).length>1?'全員が右の扉の前に集まると次の部屋へ':'右の扉へ進もう'}</small>`,2.6);break;
+      case'room':banner(`${ROOMS[v.room].name}<small>敵を全滅させよう</small>`,1.8);break;
+      case'clear':if(!v.last)banner(v.treasure?'宝箱を開けた！<small>遺物を1つ選ぼう</small>':'制圧！<small>報酬を1つ選ぼう</small>',2.2);else banner('最後の部屋を制圧！',2);break;
+      case'door':banner(`扉が開いた<small>${Object.keys(S.players).length>1?'全員が右の扉の前に集まると次の部屋へ':'右の扉へ進もう'}</small>`,2.4);break;
+      case'boom':rings.push({x:v.x,y:v.y,r:v.r,life:.35,max:.35,color:'rgba(255,176,96,A)'});burst(v.x,v.y,'#ffb060',18,260);shake=Math.max(shake,6);break;
+      case'bolt':rings.push({type:'bolt',x:v.x,y:v.y,life:.25,max:.25,seed:[0,Math.random(),Math.random(),Math.random(),Math.random(),Math.random()]});break;
+      case'bell':rings.push({x:v.x,y:v.y,r:220,life:.6,max:.6,color:'rgba(143,224,138,A)'});break;
+      case'smoke':burst(v.x,v.y,'#8a8378',26,160);break;
+      case'block':rings.push({x:v.x,y:v.y,r:34,life:.3,max:.3,color:'rgba(207,227,255,A)'});num(v.x,v.y-30,'防いだ','#cfe3ff');break;
+      case'bear':num(v.x,v.y-34,'不屈！','#ffd36a');burst(v.x,v.y,'#ffd36a',20,220);break;
+      case'chest':burst(v.x,v.y-10,'#e2a243',26,240);break;
+      case'got':if(v.id!==MY&&CAT[v.item])toast(`${slotName(v.id)}が「${CAT[v.item].name}」を手に入れた`);break;
+      case'use':if(v.item==='i_potion'||v.item==='i_glass'){const p=S.players[v.id];if(p)burst(p.x,p.y,'#8fe08a',12,160)}break;
       case'end':setTimeout(showResult,v.win?700:1200);break;
     }
   }
@@ -679,8 +962,9 @@ function showResult(){
   if(S.phase!=='win'&&S.phase!=='lose')return;
   const win=S.phase==='win';
   $('#rTitle').textContent=win?'踏破！':'全滅…';
-  $('#rSub').textContent=win?'試しの地下道を突破しました':`${ROOM_NAMES[S.room]}で力尽きました`;
+  $('#rSub').textContent=win?'試しの地下道を突破しました':`${ROOMS[S.room].name}で力尽きました`;
   const sec=Math.max(0,Math.round(S.endT-S.startT));$('#rTime').textContent=`${sec/60|0}:${String(sec%60).padStart(2,'0')}`;
+  const me=S.players[MY];$('#rGot').innerHTML=me?'手に入れたもの<br><b>'+(ownedText(me).replace('所持：',''))+'</b>':'';
   $('#rKills').textContent=S.kills;$('#rRoom').textContent=`${S.room+1} / ${ROOMS.length}`;
   $('#rActions').hidden=mode==='client';$('#rWait').hidden=mode!=='client';
   $('#again').textContent=mode==='host'?'全員でもう一度':'同じ職業でもう一度';
@@ -738,6 +1022,12 @@ function draw(){
   ctx.setTransform(dpr*zoom,0,0,dpr*zoom,(-cx*zoom+sx)*dpr,(-cy*zoom+sy)*dpr);
   ctx.drawImage(roomBg(S.room),0,0);
   drawDoor();
+  if(S.chest){const c=S.chest;shadow(c.x,c.y+4,22);
+    if(!c.open){const gl=.5+.5*Math.sin(time*3);ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(c.x,c.y,4,c.x,c.y,70);
+      g.addColorStop(0,`rgba(226,162,67,${.18+.12*gl})`);g.addColorStop(1,'rgba(226,162,67,0)');ctx.fillStyle=g;ctx.fillRect(c.x-70,c.y-70,140,140);ctx.globalCompositeOperation='source-over'}
+    ctx.fillStyle='#6b4423';ctx.fillRect(c.x-24,c.y-10,48,26);ctx.strokeStyle='#2b1a0c';ctx.lineWidth=2;ctx.strokeRect(c.x-24,c.y-10,48,26);
+    ctx.fillStyle=c.open?'#2b1a0c':'#7d5230';ctx.fillRect(c.x-24,c.y-(c.open?26:22),48,c.open?8:14);ctx.strokeRect(c.x-24,c.y-(c.open?26:22),48,c.open?8:14);
+    ctx.fillStyle='#d9a441';ctx.fillRect(c.x-4,c.y-12,8,10);ctx.fillRect(c.x-24,c.y+2,48,3)}
 
   ctx.globalCompositeOperation='lighter';
   for(const t of torches){const fl=1+Math.sin(time*9+t.x)*.06+Math.sin(time*23+t.y)*.04;
@@ -774,15 +1064,24 @@ function draw(){
     ctx.restore()}
 
   for(const s of S.shots){
+    if(s.kind==='bomb'){ctx.fillStyle='#2a2420';ctx.strokeStyle='#8c7f6a';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s.x,s.y,8,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.fillStyle=Math.floor(time*16)%2?'#ffb060':'#fff1d6';ctx.fillRect(s.x+4,s.y-11,3,3);continue}
+    if(s.kind==='wave'){const a=Math.atan2(s.vy,s.vx);ctx.strokeStyle='rgba(255,230,200,.8)';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x-Math.cos(a)*10,s.y-Math.sin(a)*10,16,a-.9,a+.9);ctx.stroke();continue}
     if(s.kind==='orb'){ctx.fillStyle='rgba(255,240,170,.3)';ctx.beginPath();ctx.arc(s.x,s.y,s.r*1.9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff6c9';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill()}
     else{const v=Math.hypot(s.vx,s.vy),ux=s.vx/v,uy=s.vy/v,enemy=s.owner==='e';
       ctx.strokeStyle=enemy?'#8c7f6a':'#d9c79e';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(s.x-ux*16,s.y-uy*16);ctx.lineTo(s.x,s.y);ctx.stroke();
       ctx.fillStyle=enemy?'#ff7a64':'#eef6e6';ctx.beginPath();ctx.moveTo(s.x+ux*5,s.y+uy*5);ctx.lineTo(s.x-uy*3.5,s.y+ux*3.5);ctx.lineTo(s.x+uy*3.5,s.y-ux*3.5);ctx.fill()}}
 
+  for(const g of rings){const k=g.life/g.max;
+    if(g.type==='bolt'){ctx.strokeStyle=`rgba(207,227,255,${k})`;ctx.lineWidth=3;ctx.beginPath();let x=g.x,y=g.y-220;ctx.moveTo(x,y);
+      for(let i=1;i<=6;i++){x=g.x+(i<6?(g.seed[i]-.5)*30:0);y=g.y-220+i*220/6;ctx.lineTo(x,y)}ctx.stroke();
+      ctx.fillStyle=`rgba(207,227,255,${.35*k})`;ctx.beginPath();ctx.arc(g.x,g.y,26,0,Math.PI*2);ctx.fill()}
+    else{ctx.strokeStyle=g.color.replace('A',(k*.9).toFixed(2));ctx.lineWidth=4*k+1;ctx.beginPath();ctx.arc(g.x,g.y,g.r*(1-k*.6),0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle=g.color.replace('A',(k*.25).toFixed(2));ctx.fill()}}
   for(const q of parts){ctx.globalAlpha=Math.min(1,q.life/q.max*1.6);ctx.fillStyle=q.color;ctx.fillRect(q.x-q.size/2,q.y-q.size/2,q.size,q.size)}
   ctx.globalAlpha=1;
   ctx.font=`18px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
-  for(const n of nums){ctx.globalAlpha=Math.min(1,n.life/n.max*2);ctx.lineWidth=4;ctx.strokeStyle='#120f0c';ctx.strokeText(n.t,n.x,n.y);ctx.fillStyle=n.color;ctx.fillText(n.t,n.x,n.y)}
+  for(const n of nums){ctx.font=`${n.big?24:18}px ${FONT}`;ctx.globalAlpha=Math.min(1,n.life/n.max*2);ctx.lineWidth=4;ctx.strokeStyle='#120f0c';ctx.strokeText(n.t,n.x,n.y);ctx.fillStyle=n.color;ctx.fillText(n.t,n.x,n.y)}
   ctx.globalAlpha=1;
 
   ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -806,7 +1105,7 @@ function drawDoor(){
 function drawPlayer(p){
   const c=CLASSES[p.cls];shadow(p.x,p.y,p.r);
   const blink=p.iframe>0&&!p.down&&Math.floor(time*20)%2===0;
-  ctx.globalAlpha=blink?.45:1;
+  ctx.globalAlpha=blink?.45:p.smoke>0?.35:1;
   ctx.fillStyle=p.down?'#5d554c':c.color;ctx.strokeStyle=p.down?'#2c2722':c.dark;ctx.lineWidth=3;
   ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.stroke();
   ctx.fillStyle='#1a140f';ctx.font=`15px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(c.glyph,p.x,p.y+1);
@@ -817,6 +1116,8 @@ function drawPlayer(p){
   const tx=p.x+p.fx*26,ty=p.y+p.fy*26;ctx.fillStyle=p.id===MY?'#efe5d3':'rgba(239,229,211,.6)';ctx.beginPath();
   ctx.moveTo(tx+p.fx*6,ty+p.fy*6);ctx.lineTo(tx-p.fy*5,ty+p.fx*5);ctx.lineTo(tx+p.fy*5,ty-p.fx*5);ctx.fill();
   bar(p.x,p.y+p.r+12,36,p.hp/p.max,p.hp/p.max>.3?'#8fe08a':'#e0c25a');
+  if(p.shield>0){ctx.strokeStyle=`rgba(207,227,255,${.45+.2*Math.sin(time*6)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,p.r+7,0,Math.PI*2);ctx.stroke()}
+  if(p.offer){ctx.fillStyle='#e2a243';ctx.font=`13px ${FONT}`;ctx.fillText('選択中…',p.x,p.y-p.r-14)}
 }
 function drawEnemy(e){
   shadow(e.x,e.y,e.r);const fl=e.flash>0;
@@ -837,6 +1138,8 @@ function drawEnemy(e){
     ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fill();ctx.stroke();
     if(!fl){ctx.fillStyle='#231f1a';ctx.beginPath();ctx.arc(e.x-5,e.y-3,3.5,0,Math.PI*2);ctx.arc(e.x+5,e.y-3,3.5,0,Math.PI*2);ctx.fill();ctx.fillRect(e.x-4,e.y+5,8,2)}
     const a=Math.atan2(e.ay,e.ax);ctx.strokeStyle='#8a6a3e';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(e.x+Math.cos(a)*6,e.y+Math.sin(a)*6,20,a-1,a+1);ctx.stroke()}
+  if(e.frozen){ctx.fillStyle='rgba(160,210,255,.45)';ctx.strokeStyle='rgba(220,240,255,.9)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(e.x,e.y,e.r+3,0,Math.PI*2);ctx.fill();ctx.stroke()}
+  if(e.burn&&Math.random()<.35)parts.push({x:e.x+(Math.random()-.5)*e.r*1.4,y:e.y-4,vx:(Math.random()-.5)*20,vy:-60-Math.random()*40,life:.35,max:.4,color:Math.random()<.5?'#ffb060':'#e0592a',size:3});
   if(e.hp<e.max)bar(e.x,e.y-e.r-14,32,e.hp/e.max,'#e07a5a');
 }
 
@@ -846,10 +1149,42 @@ function updateHud(dt){
   const me=S.players[MY];if(!me)return;const c=CLASSES[me.cls];
   $('#hHp').style.width=(me.hp/me.max*100)+'%';$('#hHp').style.background=me.hp/me.max>.3?'#8fe08a':'#e0c25a';
   $('#hNum').textContent=me.down?'戦闘不能':`HP ${me.hp} / ${me.max}`;
-  $('#hRoom').innerHTML=`${ROOM_NAMES[S.room]} <span class="note">/ ${ROOMS.length}</span>`;
+  $('#hRoom').innerHTML=`${ROOMS[S.room].name} <span class="note">/ ${ROOMS.length}</span>`;
   const left=S.enemies.length+S.spawns.length;const hl=$('#hLeft');
-  hl.className='left'+(S.doorOpen?' clear':'');hl.innerHTML=S.doorOpen?'<b>扉が開いた</b>':`残りの敵 <b>${left}</b>`;
-  atkB.style.setProperty('--p',(me.atkCd/c.atkCd).toFixed(3));sklB.style.setProperty('--p',(me.skillCd/c.skillCd).toFixed(3));
+  hl.className='left'+(S.doorOpen?' clear':'');hl.innerHTML=S.doorOpen?'<b>扉が開いた</b>':S.chest&&!S.chest.open?'<b>宝箱を開けよう</b>':`残りの敵 <b>${left}</b>`;
+  atkB.style.setProperty('--p',clamp(me.atkCd/c.atkCd,0,1).toFixed(3));sklB.style.setProperty('--p',clamp(me.skillCd/skillCdOf(me),0,1).toFixed(3));
+  const it=me.item&&CAT[me.item.id],bag=it?`道具 <b>${it.name}</b> ×${me.item.n}`:'道具 なし';
+  if(bagHtml!==bag){bagHtml=bag;$('#hBag').innerHTML=bag;$('#itmN').textContent=it?me.item.n:'';itmB.disabled=!it}
+  if(S.cleared&&!S.doorOpen&&!me.offer&&Object.values(S.players).some(p=>p.offer))hl.innerHTML='<b>仲間が選択中…</b>';
+  updatePick(me);
+}
+let bagHtml='',pickSig='';
+function ownedText(p){
+  const names=Object.entries(p.ups||{}).map(([id,n])=>CAT[id]?CAT[id].name+(n>1?'×'+n:''):'').filter(Boolean);
+  return names.length?'所持：'+names.join('・'):'所持：まだ何もありません';
+}
+function updatePick(me){
+  const box=$('#pick');
+  const sig=me.offer&&S.phase==='play'?me.offer.join(','):'';
+  if(sig===pickSig||(pickSig==='sent'&&sig))return;pickSig=sig;
+  if(!sig){box.hidden=true;$('#keys').hidden=coarse.matches||S.phase!=='play';return}
+  $('#keys').hidden=true;
+  const treasure=!!S.chest;
+  $('#pickTitle').textContent=treasure?'宝箱から遺物を1つ選ぶ':'報酬を1つ選ぶ';
+  $('#pickNote').textContent=coarse.matches?'':'1〜3キーでも選べます';
+  const wrap=$('#picks');wrap.innerHTML='';
+  me.offer.forEach((id,i)=>{const c=CAT[id];const b=document.createElement('button');b.className='pc r'+c.rar;
+    const swap=c.kind==='item'&&me.item?`<span class="sw">今の「${CAT[me.item.id].name}」と入れ替え</span>`:'';
+    const lv=c.stack&&me.ups&&me.ups[id]?`<span>所持${me.ups[id]}</span>`:'';
+    b.innerHTML=`<span class="tag"><span class="k ${c.kind}">${KIND_NAME[c.kind]}</span>${c.rar>1?`<span class="rr">${RAR_NAME[c.rar]}</span>`:''}${c.cls?`<span>${CLASSES[c.cls].name}専用</span>`:''}${lv}</span><span class="nm">${c.name}</span><span class="ds">${c.desc}</span>${swap}`;
+    b.addEventListener('click',()=>choose(i));wrap.appendChild(b)});
+  $('#owned').textContent=ownedText(me);
+  box.hidden=false;
+}
+function choose(i){
+  const me=S.players[MY];if(!me||!me.offer||!me.offer[i]||S.phase!=='play')return;
+  if(mode==='client'){send(hostConn,{t:'choose',i});pickSig='sent';$('#pick').hidden=true}
+  else chooseOffer(S,me,i);
 }
 
 // ---------- ループ ----------
@@ -857,15 +1192,15 @@ let last=performance.now();
 function loop(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;time+=dt;
   if(mode==='client'){
-    const inp=readInput();if(inp.skill)mySkillN++;
-    sendAcc+=dt;if(sendAcc>=1/30&&hostConn){sendAcc=0;send(hostConn,{t:'in',mx:r2(inp.mx),my:r2(inp.my),atk:inp.atk,sn:mySkillN})}
+    const inp=readInput();if(inp.skill)mySkillN++;if(inp.item)myItemN++;
+    sendAcc+=dt;if(sendAcc>=1/30&&hostConn){sendAcc=0;send(hostConn,{t:'in',mx:r2(inp.mx),my:r2(inp.my),atk:inp.atk,sn:mySkillN,iu:myItemN})}
     if(snapB)buildClientView();
   }else{
     if(S.phase==='play'){
       const inp={};inp[MY]=readInput();
       if(mode==='host')for(const id in netInputs){const ni=netInputs[id];if(!S.players[id])continue;
-        if(lastSkillN[id]===undefined)lastSkillN[id]=ni.sn;
-        inp[id]={mx:clamp(+ni.mx||0,-1,1),my:clamp(+ni.my||0,-1,1),atk:!!ni.atk,skill:ni.sn!==lastSkillN[id]};lastSkillN[id]=ni.sn}
+        if(lastSkillN[id]===undefined){lastSkillN[id]=ni.sn;lastItemN[id]=ni.iu}
+        inp[id]={mx:clamp(+ni.mx||0,-1,1),my:clamp(+ni.my||0,-1,1),atk:!!ni.atk,skill:ni.sn!==lastSkillN[id],item:ni.iu!==lastItemN[id]};lastSkillN[id]=ni.sn;lastItemN[id]=ni.iu}
       stepSim(S,inp,dt);
     }
     const evs=S.ev.splice(0);
@@ -874,6 +1209,7 @@ function loop(now){
     handleEvents(evs);
   }
   for(const f of arcs)f.life-=dt;arcs=arcs.filter(f=>f.life>0);
+  for(const g of rings)g.life-=dt;rings=rings.filter(g=>g.life>0);
   for(const q of parts){q.x+=q.vx*dt;q.y+=q.vy*dt;q.vx*=.9;q.vy*=.9;q.life-=dt}parts=parts.filter(q=>q.life>0);
   for(const n of nums){n.y-=42*dt;n.life-=dt}nums=nums.filter(n=>n.life>0);
   shake*=Math.exp(-dt*14);if(shake<.2)shake=0;hurtFlash=Math.max(0,hurtFlash-dt);
