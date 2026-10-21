@@ -139,6 +139,12 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
 .owned{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
 .gotlist{margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7}
 .gotlist b{font-weight:400;color:var(--ink)}
+#bossbar{left:50%;transform:translateX(-50%);top:calc(12px + env(safe-area-inset-top,0px));width:min(56vw,460px)}
+@media (max-width:700px){#bossbar{top:calc(104px + env(safe-area-inset-top,0px));width:calc(100% - 24px)}}
+#bossbar .bn{display:flex;justify-content:space-between;font-size:15px;text-shadow:0 2px 0 #000}
+#bossbar .ph{font-size:12px;color:var(--blood)}
+#bossbar .bb{height:10px;margin-top:4px;background:rgba(0,0,0,.7);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+#bossbar .bb i{display:block;height:100%;background:linear-gradient(90deg,#8e2a22,var(--blood));transition:width .15s}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -157,6 +163,7 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
     <div class="num" id="hNum">HP 120 / 120</div>
     <div class="bag" id="hBag">道具 なし</div>
   </div>
+  <div id="bossbar" class="hud" hidden><div class="bn"><span id="bName">ボス</span><span class="ph" id="bPh"></span></div><div class="bb"><i id="bHp"></i></div></div>
   <div id="banner" class="hud"></div>
   <div id="keys" class="hud panel" hidden>
     移動 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 矢印　攻撃 <kbd>J</kbd> / <kbd>Space</kbd>（長押し可）　スキル <kbd>K</kbd>　道具 <kbd>L</kbd><br>
@@ -252,14 +259,18 @@ const ENEMY={
   slime:{name:'スライム',r:16,hp:30,spd:70,touch:10},
   goblin:{name:'ゴブリン',r:15,hp:42,spd:118,touch:8},
   archer:{name:'骸骨弓兵',r:15,hp:34,spd:90,touch:6},
+  chief:{name:'ゴブリンの親分',r:34,hp:420,spd:95,touch:18,boss:1},
+  king:{name:'骸骨王',r:38,hp:1200,spd:70,touch:20,boss:1},
 };
 const P_A={x:300,y:230,w:64,h:64},P_B={x:836,y:230,w:64,h:64},P_C={x:300,y:506,w:64,h:64},P_D={x:836,y:506,w:64,h:64};
 const ROOMS=[
   {name:'第一の間',pillars:[P_A,P_B,P_C,P_D],wave:[['slime',4]]},
   {name:'第二の間',pillars:[{x:568,y:140,w:64,h:180},{x:568,y:480,w:64,h:180}],wave:[['slime',3],['goblin',2]]},
+  {name:'親分の間',boss:'chief',pillars:[P_A,P_B,P_C,P_D],wave:[['chief',1]]},
   {name:'宝物庫',treasure:true,pillars:[{x:200,y:150,w:48,h:48},{x:952,y:150,w:48,h:48},{x:200,y:602,w:48,h:48},{x:952,y:602,w:48,h:48}],wave:[]},
-  {name:'第四の間',pillars:[{x:330,y:200,w:48,h:48},{x:330,y:552,w:48,h:48},{x:576,y:376,w:48,h:48},{x:822,y:200,w:48,h:48},{x:822,y:552,w:48,h:48}],wave:[['goblin',2],['archer',2],['slime',2]]},
-  {name:'第五の間',pillars:[{x:420,y:120,w:64,h:200},{x:716,y:480,w:64,h:200}],wave:[['goblin',3],['archer',3],['slime',3]]},
+  {name:'第三の間',pillars:[{x:330,y:200,w:48,h:48},{x:330,y:552,w:48,h:48},{x:576,y:376,w:48,h:48},{x:822,y:200,w:48,h:48},{x:822,y:552,w:48,h:48}],wave:[['goblin',2],['archer',2],['slime',2]]},
+  {name:'第四の間',pillars:[{x:420,y:120,w:64,h:200},{x:716,y:480,w:64,h:200}],wave:[['goblin',3],['archer',3],['slime',3]]},
+  {name:'王の間',boss:'king',pillars:[{x:300,y:190,w:44,h:44},{x:856,y:190,w:44,h:44},{x:300,y:566,w:44,h:44},{x:856,y:566,w:44,h:44}],wave:[['king',1]]},
 ];
 
 // ---------- 強化・遺物・道具のカタログ ----------
@@ -336,7 +347,7 @@ const KIND_NAME={up:'強化',relic:'遺物',item:'道具'},RAR_NAME=['','','レ�
 // ================= シミュレーション（ホストが計算する部分） =================
 // ここは描画・入力から切り離してあり、通信版ではホストだけがこれを動かして結果を配る
 function createSim(){
-  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,kills:0,eid:1,startT:0,endT:0,ev:[]};
+  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,hazards:[],bossDead:false,kills:0,eid:1,startT:0,endT:0,ev:[]};
 }
 function addPlayer(S,id,cls){
   const c=CLASSES[cls];
@@ -352,7 +363,7 @@ function startRun(S){
 }
 function setupRoom(S,i){
   const R=ROOMS[i];
-  S.room=i;S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.doorOpen=false;S.cleared=false;
+  S.room=i;S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.hazards=[];S.bossDead=false;S.doorOpen=false;S.cleared=false;
   S.chest=R.treasure?{x:W/2,y:H/2,open:false}:null;
   const ps=Object.values(S.players);
   ps.forEach((p,k)=>{Object.assign(p,{x:WALL+56,y:H/2+(k-(ps.length-1)/2)*44,vx:0,vy:0,ix:0,iy:0,fx:1,fy:0,atkCd:0,skillCd:0,iframe:1,smoke:0,haste:0,pendSpin:0,dashT:0});
@@ -360,7 +371,9 @@ function setupRoom(S,i){
     if(p.down){p.down=false;p.hp=Math.round(p.max*.35);p.rev=0}});
   const hpScale=(1+.12*i)*(1+.35*(ps.length-1));
   let n=0;
-  for(const[type,count]of R.wave)for(let j=0;j<count;j++){const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:1.1+n*.4,hpScale});n++}
+  for(const[type,count]of R.wave)for(let j=0;j<count;j++){
+    if(ENEMY[type].boss){S.spawns.push({type,x:W-260,y:H/2,t:1.6,hpScale:1+.6*(ps.length-1)});continue}
+    const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:1.1+n*.4,hpScale});n++}
   S.ev.push({k:'room',room:i});
 }
 function spawnPos(S){
@@ -414,12 +427,12 @@ function strike(S,p,e,base,kx,ky,knock,color,opt={}){
   if(has(p,'c_combo')&&e.lastBy&&e.lastBy!==p.id&&S.t-e.lastT<1.5)dmg*=1.25;
   let crit=false;if(Math.random()<.1*has(p,'crit')){dmg*=2;crit=true}
   dmg=Math.max(1,Math.round(dmg));
-  if(has(p,'r_reaper')&&e.hp/e.max<.3)dmg=Math.max(dmg,Math.ceil(e.hp));
+  if(has(p,'r_reaper')&&!e.boss&&e.hp/e.max<.3)dmg=Math.max(dmg,Math.ceil(e.hp));
   e.lastBy=p.id;e.lastT=S.t;
   const ok=damageEnemy(S,e,dmg,kx,ky,knock*knockMul(p),p.id,color,crit);
   if(!ok||opt.noProc)return ok;
   if(has(p,'r_fire')&&Math.random()<.2){e.burn=3;e.burnBy=p.id}
-  if(Math.random()<.15*has(p,'r_ice'))e.frozen=1;
+  if(!e.boss&&Math.random()<.15*has(p,'r_ice'))e.frozen=1;
   if(e.hp<=0){
     if(has(p,'r_fang'))heal(S,p,4);
     if(has(p,'r_orb')){S.ev.push({k:'boom',x:e.x,y:e.y,r:80});for(const o of S.enemies)if(o!==e&&o.hp>0&&Math.hypot(o.x-e.x,o.y-e.y)<80+o.r){const d=Math.hypot(o.x-e.x,o.y-e.y)||1;strike(S,p,o,20,(o.x-e.x)/d,(o.y-e.y)/d,300,'#ffb060',{noProc:true})}}
@@ -428,10 +441,11 @@ function strike(S,p,e,base,kx,ky,knock,color,opt={}){
 }
 function damageEnemy(S,e,dmg,kx,ky,knock,by,color,crit=false){
   if(e.hp<=0)return false;
-  e.hp-=dmg;e.flash=.1;e.freeze=.06;
-  const kb=e.type==='slime'?1.25:1;e.kx+=kx*knock*kb;e.ky+=ky*knock*kb;
+  if(e.inv>0){S.ev.push({k:'immune',x:e.x,y:e.y-e.r});return false}
+  e.hp-=dmg;e.flash=.1;e.freeze=e.boss?.02:.06;
+  const kb=e.boss?.08:e.type==='slime'?1.25:1;e.kx+=kx*knock*kb;e.ky+=ky*knock*kb;
   S.ev.push({k:'hit',x:e.x,y:e.y,kx,ky,dmg,color,by,crit});
-  if(e.hp<=0){S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,by,type:e.type})}
+  if(e.hp<=0){S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,by,type:e.type});if(e.boss){S.bossDead=true;S.ev.push({k:'bossdown',x:e.x,y:e.y,name:e.name})}}
   return true;
 }
 function hurtPlayer(S,p,dmg,kx,ky,src){
@@ -521,10 +535,10 @@ function explodeBomb(S,s){
 }
 
 // ---------- 3択の候補 ----------
-function makeOffer(S,p,relicOnly){
+function makeOffer(S,p,relicOnly,boost){
   const luck=has(p,'r_coin'),multi=nPlayers(S)>1;
   let pool=CATALOG.filter(c=>(!c.cls||c.cls===p.cls)&&(c.stack||!has(p,c.id))&&(!c.coop||multi)&&(!relicOnly||c.kind==='relic')&&!(p.item&&p.item.id===c.id));
-  const rw=[0,70,25+12*luck+(relicOnly?15:0),5+6*luck+(relicOnly?5:0)],kw={up:1,relic:1.3,item:1.6};
+  const rw=[0,70,25+12*luck+(relicOnly||boost?15:0),5+6*luck+(relicOnly||boost?5:0)],kw={up:1,relic:1.3,item:1.6};
   const out=[];
   while(out.length<3&&pool.length){
     const ws=pool.map(c=>rw[c.rar]*kw[c.kind]);let r=Math.random()*ws.reduce((a,b)=>a+b,0),i=0;
@@ -573,7 +587,8 @@ function stepEnemy(S,e,dt){
   const T=ENEMY[e.type],tgt=nearestPlayer(S,e.x,e.y);
   let dx=0,dy=0,dist=1e9;if(tgt){dx=tgt.x-e.x;dy=tgt.y-e.y;dist=Math.hypot(dx,dy)||1}
   const ux=tgt?dx/dist:0,uy=tgt?dy/dist:0;let mvx=0,mvy=0;
-  if(e.type==='slime'){
+  if(T.boss){[mvx,mvy]=bossAI(S,e,dt,tgt,dist,ux,uy)}
+  else if(e.type==='slime'){
     if(tgt){const hop=.35+.65*Math.max(0,Math.sin(S.t*6+e.id));mvx=ux*T.spd*hop*1.5;mvy=uy*T.spd*hop*1.5}
   }else if(e.type==='goblin'){
     if(e.state==='wind'){if(e.timer<=0){e.state='lunge';e.timer=.26}}
@@ -594,8 +609,94 @@ function stepEnemy(S,e,dt){
   const ox=e.x,oy=e.y;
   e.x+=(mvx+e.kx)*dt;e.y+=(mvy+e.ky)*dt;wallCollide(S,e);
   if(e.type==='archer'&&Math.hypot(e.x-ox,e.y-oy)<(Math.hypot(mvx,mvy)*dt)*.3)e.dir*=-1;
+  if(e.type==='chief'&&e.state==='charge'&&Math.hypot(e.x-ox,e.y-oy)<Math.hypot(mvx,mvy)*dt*.4){
+    e.state='stun';e.timer=1.1;e.chain=0;S.ev.push({k:'boom',x:e.x+e.ax*e.r,y:e.y+e.ay*e.r,r:60});S.ev.push({k:'stun',x:e.x,y:e.y})}
   for(const p of alivePlayers(S)){const ddx=p.x-e.x,ddy=p.y-e.y,d=Math.hypot(ddx,ddy)||1;
-    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:T.touch;hurtPlayer(S,p,dmg,ddx/d,ddy/d,e)}}
+    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:e.type==='chief'&&e.state==='charge'?24:T.touch;hurtPlayer(S,p,dmg,ddx/d,ddy/d,e)}}
+}
+
+// ---------- ボスの行動 ----------
+function bossWind(e,atk,t){e.state='wind';e.atk=atk;e.timer=t;e.wmax=t}
+function eBullet(S,x,y,ang,spd,dmg=12){S.shots.push({id:S.eid++,owner:'e',x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,r:7,dmg,life:4,kind:'ebolt',bounce:0,dist:0,hits:[]})}
+function addMinion(S,type,x,y){
+  x=clamp(x,WALL+30,W-WALL-30);y=clamp(y,WALL+30,H-WALL-30);
+  S.spawns.push({type,x,y,t:.5,hpScale:(1+.12*S.room)*(1+.35*(nPlayers(S)-1))});
+}
+function hurtArea(S,x,y,r,dmg,knock=1){
+  for(const p of alivePlayers(S)){const d=Math.hypot(p.x-x,p.y-y)||1;if(d<r+p.r)hurtPlayer(S,p,dmg,(p.x-x)/d*knock,(p.y-y)/d*knock)}
+}
+function bossAI(S,e,dt,tgt,dist,ux,uy){
+  const T=ENEMY[e.type];let mvx=0,mvy=0;
+  if(e.inv>0)e.inv-=dt;
+  if(e.type==='chief'){
+    const enr=e.hp<e.max*.5,sp=enr?.8:1;
+    if(e.state==='walk'){
+      if(tgt){mvx=ux*T.spd*(enr?1.2:1);mvy=uy*T.spd*(enr?1.2:1)}
+      if(e.cd<=0&&tgt){e.n++;
+        if(e.n%3===0&&S.enemies.length+S.spawns.length<7)bossWind(e,'summon',.7*sp);
+        else if(dist>200){bossWind(e,'charge',.8*sp);e.ax=ux;e.ay=uy}
+        else bossWind(e,'slam',.9*sp)}
+    }else if(e.state==='wind'){
+      if(e.atk==='charge'&&e.timer>.25&&tgt){e.ax=ux;e.ay=uy}
+      if(e.timer<=0){
+        if(e.atk==='charge'){e.state='charge';e.timer=.5}
+        else if(e.atk==='slam'){S.ev.push({k:'boom',x:e.x,y:e.y,r:150});hurtArea(S,e.x,e.y,150,22);e.state='rest';e.timer=.6}
+        else{for(const s of[-1,1])addMinion(S,'goblin',e.x+s*70,e.y+s*40);S.ev.push({k:'roar',x:e.x,y:e.y});e.state='rest';e.timer=.4}
+      }
+    }else if(e.state==='charge'){
+      mvx=e.ax*640;mvy=e.ay*640;
+      if(e.timer<=0){if(enr&&!e.chain){e.chain=1;bossWind(e,'charge',.4)}else{e.chain=0;e.state='rest';e.timer=.6}}
+    }else if(e.timer<=0){const wasStun=e.state==='stun';e.state='walk';e.cd=wasStun?.6:1+Math.random()*.6}
+    return[mvx,mvy];
+  }
+  // 骸骨王：HPが2/3・1/3を切るたびに段階が上がる
+  const ph=e.hp>e.max*.66?1:e.hp>e.max*.33?2:3;
+  if(ph>e.phase){e.phase=ph;e.state='roar';e.timer=1.3;e.inv=1.3;
+    S.shots=S.shots.filter(s=>s.owner!=='e');S.hazards=[];
+    S.ev.push({k:'phase',phase:ph,x:e.x,y:e.y,name:e.name});
+    for(const p of alivePlayers(S)){const d=Math.hypot(p.x-e.x,p.y-e.y)||1;if(d<220){p.ix+=(p.x-e.x)/d*520;p.iy+=(p.y-e.y)/d*520}}}
+  if(e.state==='roar'){if(e.timer<=0){e.state='walk';e.cd=.6}return[0,0]}
+  if(e.state==='walk'){
+    if(tgt){if(dist>220){mvx=ux*T.spd;mvy=uy*T.spd}else if(dist<140){mvx=-ux*T.spd*.6;mvy=-uy*T.spd*.6}else{mvx=-uy*T.spd*.5;mvy=ux*T.spd*.5}}
+    if(e.cd<=0){
+      const opts=ph===1?['ring','zones','ring','zones']:ph===2?['ring','zones','sweep','summon','ring']:['spiral','ring','zones','sweep','spiral'];
+      let pick=opts[Math.floor(Math.random()*opts.length)];
+      if(pick===e.lastAtk)pick=opts[(opts.indexOf(pick)+1)%opts.length];
+      if(pick==='summon'&&S.enemies.length+S.spawns.length>4)pick='ring';
+      if(pick==='sweep'&&(!tgt||dist>260))pick='zones';
+      e.lastAtk=pick;
+      bossWind(e,pick,{ring:.7,zones:.5,sweep:.6,summon:.8,spiral:.9}[pick]);
+      if(tgt){e.ax=ux;e.ay=uy}
+    }
+  }else if(e.state==='wind'){
+    if(e.atk==='sweep'&&tgt&&e.timer>.2){e.ax=ux;e.ay=uy}
+    if(e.timer<=0){
+      if(e.atk==='ring'){e.state='cast';e.burst=ph;e.timer=0;e.rot=Math.random()*Math.PI}
+      else if(e.atk==='zones'){
+        for(const p of alivePlayers(S))S.hazards.push({x:p.x+p.vx*.3,y:p.y+p.vy*.3,r:72,t:1.1,max:1.1,dmg:20});
+        for(let i=0;i<ph+1;i++)S.hazards.push({x:WALL+80+Math.random()*(W-2*WALL-160),y:WALL+80+Math.random()*(H-2*WALL-160),r:72,t:1.1+i*.15,max:1.1+i*.15,dmg:20});
+        e.state='rest';e.timer=.5}
+      else if(e.atk==='sweep'){
+        const ang=Math.atan2(e.ay,e.ax),R=185,arc=Math.PI*.75;
+        S.ev.push({k:'cone',x:e.x,y:e.y,ang,arc,r:R});
+        for(const p of alivePlayers(S)){const ddx=p.x-e.x,ddy=p.y-e.y,d=Math.hypot(ddx,ddy)||1;
+          const da=Math.abs(((Math.atan2(ddy,ddx)-ang)+Math.PI*3)%(Math.PI*2)-Math.PI);
+          if(d<R+p.r&&da<arc/2)hurtPlayer(S,p,24,ddx/d,ddy/d)}
+        e.state='rest';e.timer=.55}
+      else if(e.atk==='summon'){addMinion(S,'archer',WALL+90,WALL+90+Math.random()*200);addMinion(S,'archer',W-WALL-90,H-WALL-90-Math.random()*200);S.ev.push({k:'roar',x:e.x,y:e.y});e.state='rest';e.timer=.5}
+      else{e.state='spiral';e.timer=2.6;e.rot=0;e.tick=0}
+    }
+  }else if(e.state==='cast'){
+    if(e.timer<=0){const n=14+3*ph;e.rot+=Math.PI/n;
+      for(let i=0;i<n;i++)eBullet(S,e.x,e.y,e.rot+i*Math.PI*2/n,200+20*ph);
+      S.ev.push({k:'cast',x:e.x,y:e.y});
+      e.burst--;e.timer=.45;if(e.burst<=0){e.state='rest';e.timer=.7}}
+  }else if(e.state==='spiral'){
+    e.tick-=dt;e.rot+=dt*2.4;
+    if(e.tick<=0){e.tick=.09;for(let i=0;i<3;i++)eBullet(S,e.x,e.y,e.rot+i*Math.PI*2/3,210,10)}
+    if(e.timer<=0){e.state='rest';e.timer=.8}
+  }else if(e.state==='rest'){if(e.timer<=0){e.state='walk';e.cd=1.7-.3*ph}}
+  return[mvx,mvy];
 }
 
 function stepSim(S,inputs,dt){
@@ -611,8 +712,9 @@ function stepSim(S,inputs,dt){
     if(p.rev>=1){p.down=false;p.rev=0;p.hp=Math.round(p.max*.35);p.iframe=1.2;S.ev.push({k:'revive',id:p.id,x:p.x,y:p.y})}}
 
   for(const sp of S.spawns){sp.t-=dt;if(sp.t<=0){const T=ENEMY[sp.type],hp=Math.round(T.hp*sp.hpScale);
-    S.enemies.push({id:S.eid++,type:sp.type,x:sp.x,y:sp.y,r:T.r,hp,max:hp,kx:0,ky:0,flash:0,freeze:0,frozen:0,burn:0,cd:1+Math.random(),timer:0,state:'walk',ax:1,ay:0,dir:Math.random()<.5?-1:1});
-    S.ev.push({k:'spawn',x:sp.x,y:sp.y})}}
+    S.enemies.push({id:S.eid++,type:sp.type,x:sp.x,y:sp.y,r:T.r,hp,max:hp,kx:0,ky:0,flash:0,freeze:0,frozen:0,burn:0,cd:T.boss?1.2:1+Math.random(),timer:0,state:'walk',ax:-1,ay:0,dir:Math.random()<.5?-1:1,
+      boss:!!T.boss,name:T.name,phase:1,n:0,chain:0,inv:0,atk:null,wmax:1});
+    S.ev.push({k:T.boss?'bossin':'spawn',x:sp.x,y:sp.y,name:T.name})}}
   S.spawns=S.spawns.filter(s=>s.t>0);
 
   for(const e of S.enemies)if(e.hp>0)stepEnemy(S,e,dt);
@@ -649,12 +751,17 @@ function stepSim(S,inputs,dt){
   S.zones=S.zones.filter(z=>z.life>0);
   S.enemies=S.enemies.filter(e=>e.hp>0);
 
+  for(const h of S.hazards){h.t-=dt;if(h.t<=0){S.ev.push({k:'boom',x:h.x,y:h.y,r:h.r,hz:1});hurtArea(S,h.x,h.y,h.r,h.dmg,.6)}}
+  S.hazards=S.hazards.filter(h=>h.t>0);
+  if(S.bossDead){S.bossDead=false;S.spawns=[];S.hazards=[];S.shots=S.shots.filter(s=>s.owner!=='e');
+    for(const e of S.enemies)if(e.hp>0){e.hp=0;S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,type:e.type})}
+    S.enemies=[]}
   const last=S.room>=ROOMS.length-1;
   if(!S.cleared&&!S.spawns.length&&!S.enemies.length&&(!S.chest||S.chest.open)){
     S.cleared=true;
     if(!S.chest){
       for(const p of Object.values(S.players))if(has(p,'regen'))heal(S,p,p.max*.25);
-      if(!last)for(const p of Object.values(S.players))makeOffer(S,p,false);
+      if(!last)for(const p of Object.values(S.players))makeOffer(S,p,false,!!ROOMS[S.room].boss);
     }
     S.ev.push({k:'clear',room:S.room,last,treasure:!!S.chest});
   }
@@ -829,14 +936,14 @@ function buildClientView(){
   const B=snapB,A=snapA&&snapA.room===B.room?snapA:null;
   const al=A?clamp((performance.now()-tB)/Math.max(16,tB-tA),0,1):1;
   const players={};for(const p of lerpList(A&&A.players,B.players,al))players[p.id]=p;
-  S={t:B.t,phase:B.phase,room:B.room,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,kills:B.kills,startT:B.startT,endT:B.endT,
+  S={t:B.t,phase:B.phase,room:B.room,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,hazards:B.hazards||[],kills:B.kills,startT:B.startT,endT:B.endT,
     players,enemies:lerpList(A&&A.enemies,B.enemies,al),shots:lerpList(A&&A.shots,B.shots,al),zones:B.zones,spawns:B.spawns,ev:[]};
 }
 const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
 function packState(S){
-  return{t:r1(S.t),phase:S.phase,room:S.room,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,kills:S.kills,startT:S.startT,endT:S.endT,
+  return{t:r1(S.t),phase:S.phase,room:S.room,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,hazards:S.hazards.map(h=>({x:r1(h.x),y:r1(h.y),r:h.r,t:r2(h.t),max:h.max})),kills:S.kills,startT:S.startT,endT:S.endT,
     players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r,ups:p.ups,item:p.item,offer:p.offer,smoke:r2(p.smoke),shield:p.shield,haste:r2(p.haste)})),
-    enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0})),
+    enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0,boss:e.boss,name:e.name,phase:e.phase,atk:e.atk,wmax:e.wmax,inv:r2(e.inv)})),
     shots:S.shots.map(s=>({id:s.id,x:r1(s.x),y:r1(s.y),vx:r1(s.vx),vy:r1(s.vy),kind:s.kind,owner:s.owner,r:s.r})),
     zones:S.zones.map(z=>({x:r1(z.x),y:r1(z.y),r:z.r,life:r2(z.life)})),
     spawns:S.spawns.map(s=>({x:r1(s.x),y:r1(s.y),t:r2(s.t)}))};
@@ -908,6 +1015,10 @@ function start(){
   if(mode==='host')for(const[id,m]of Object.entries(members))addPlayer(S,id,m.cls);
   else addPlayer(S,MY,myCls);
   startRun(S);
+  // 確認用：URLの末尾に #boss1 / #boss2 を付けると、強化を数個持った状態でボス部屋から始まる
+  const jump=(location.hash||'').match(/^#boss([12])$/);
+  if(jump){const room=jump[1]==='1'?2:6;for(const p of Object.values(S.players))for(let k=0;k<(room===2?2:5);k++){makeOffer(S,p,false);chooseOffer(S,p,Math.floor(Math.random()*p.offer.length))}
+    S.ev.length=0;setupRoom(S,room)}
   netInputs={};lastSkillN={};lastItemN={};evQueue=[];snapAcc=1;pickSig='';
   parts=[];nums=[];arcs=[];rings=[];shake=0;bagHtml='';
   $('#lobby').hidden=true;$('#result').hidden=true;showHud(true);cv.focus();setMeHud();
@@ -944,6 +1055,14 @@ function handleEvents(list){
       case'left':banner(`${slotName(v.id)}が退出しました`,2);break;
       case'room':banner(`${ROOMS[v.room].name}<small>敵を全滅させよう</small>`,1.8);break;
       case'clear':if(!v.last)banner(v.treasure?'宝箱を開けた！<small>遺物を1つ選ぼう</small>':'制圧！<small>報酬を1つ選ぼう</small>',2.2);else banner('最後の部屋を制圧！',2);break;
+      case'bossin':banner(`${v.name}が現れた！`,2);shake=Math.max(shake,8);burst(v.x,v.y,'#7a2a3a',30,260);break;
+      case'bossdown':banner(`${v.name}を倒した！`,2.6);shake=Math.max(shake,14);burst(v.x,v.y,'#e2a243',50,380);rings.push({x:v.x,y:v.y,r:200,life:.7,max:.7,color:'rgba(226,162,67,A)'});break;
+      case'phase':banner(v.phase===3?`${v.name}が本気を出した！<small>攻撃がさらに激しくなる</small>`:`${v.name}の様子が変わった！`,2.4);shake=Math.max(shake,12);rings.push({x:v.x,y:v.y,r:220,life:.6,max:.6,color:'rgba(150,90,220,A)'});break;
+      case'roar':rings.push({x:v.x,y:v.y,r:120,life:.4,max:.4,color:'rgba(201,72,58,A)'});break;
+      case'cast':rings.push({x:v.x,y:v.y,r:70,life:.3,max:.3,color:'rgba(170,110,240,A)'});break;
+      case'cone':rings.push({type:'cone',x:v.x,y:v.y,ang:v.ang,arc:v.arc,r:v.r,life:.3,max:.3});shake=Math.max(shake,5);break;
+      case'stun':num(v.x,v.y-50,'ふらふら','#ffd36a');shake=Math.max(shake,9);break;
+      case'immune':if(Math.random()<.2)num(v.x,v.y-10,'無効','#a8997f');break;
       case'door':banner(`扉が開いた<small>${Object.keys(S.players).length>1?'全員が右の扉の前に集まると次の部屋へ':'右の扉へ進もう'}</small>`,2.4);break;
       case'boom':rings.push({x:v.x,y:v.y,r:v.r,life:.35,max:.35,color:'rgba(255,176,96,A)'});burst(v.x,v.y,'#ffb060',18,260);shake=Math.max(shake,6);break;
       case'bolt':rings.push({type:'bolt',x:v.x,y:v.y,life:.25,max:.25,seed:[0,Math.random(),Math.random(),Math.random(),Math.random(),Math.random()]});break;
@@ -1046,6 +1165,19 @@ function draw(){
     ctx.strokeStyle=`rgba(240,225,150,${.7*a})`;ctx.lineWidth=2;ctx.setLineDash([10,8]);ctx.lineDashOffset=-time*30;
     ctx.beginPath();ctx.arc(z.x,z.y,z.r,0,Math.PI*2);ctx.stroke();ctx.setLineDash([])}
 
+  for(const h of S.hazards||[]){const k=1-h.t/h.max;
+    ctx.fillStyle=`rgba(150,40,60,${.12+.1*k})`;ctx.beginPath();ctx.arc(h.x,h.y,h.r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=`rgba(220,70,80,${.25+.3*k})`;ctx.beginPath();ctx.arc(h.x,h.y,h.r*k,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=`rgba(255,120,110,${.5+.4*k})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(h.x,h.y,h.r,0,Math.PI*2);ctx.stroke()}
+  for(const e of S.enemies){if(!e.boss||e.state!=='wind')continue;const k=clamp(1-e.timer/(e.wmax||1),0,1),ang=Math.atan2(e.ay,e.ax);
+    if(e.atk==='charge'){ctx.save();ctx.translate(e.x,e.y);ctx.rotate(ang);ctx.fillStyle=`rgba(201,72,58,${.15+.25*k})`;ctx.fillRect(0,-e.r,320,e.r*2);
+      ctx.strokeStyle=`rgba(255,120,100,${.5+.4*k})`;ctx.lineWidth=2;ctx.strokeRect(0,-e.r,320*k,e.r*2);ctx.restore()}
+    else if(e.atk==='slam'){ctx.fillStyle=`rgba(201,72,58,${.12+.2*k})`;ctx.beginPath();ctx.arc(e.x,e.y,150,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=`rgba(255,120,100,${.6+.3*k})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,150*k,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(e.x,e.y,150,0,Math.PI*2);ctx.stroke()}
+    else if(e.atk==='sweep'){ctx.fillStyle=`rgba(201,72,58,${.15+.25*k})`;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.arc(e.x,e.y,185,ang-Math.PI*.375,ang+Math.PI*.375);ctx.closePath();ctx.fill();
+      ctx.strokeStyle=`rgba(255,120,100,${.5+.4*k})`;ctx.lineWidth=2;ctx.stroke()}
+    else{ctx.strokeStyle=`rgba(170,110,240,${.3+.5*k})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+10+18*(1-k),0,Math.PI*2);ctx.stroke()}
+  }
   // 敵の攻撃予告（足元に描くので先に）
   for(const e of S.enemies){
     if(e.type==='goblin'&&e.state==='wind'){const k=1-e.timer/.45;ctx.save();ctx.translate(e.x,e.y);ctx.rotate(Math.atan2(e.ay,e.ax));
@@ -1066,6 +1198,8 @@ function draw(){
   for(const s of S.shots){
     if(s.kind==='bomb'){ctx.fillStyle='#2a2420';ctx.strokeStyle='#8c7f6a';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s.x,s.y,8,0,Math.PI*2);ctx.fill();ctx.stroke();
       ctx.fillStyle=Math.floor(time*16)%2?'#ffb060':'#fff1d6';ctx.fillRect(s.x+4,s.y-11,3,3);continue}
+    if(s.kind==='ebolt'){ctx.fillStyle='rgba(150,90,220,.35)';ctx.beginPath();ctx.arc(s.x,s.y,s.r*1.9,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#d8c2ff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#6a3fb0';ctx.lineWidth=1.5;ctx.stroke();continue}
     if(s.kind==='wave'){const a=Math.atan2(s.vy,s.vx);ctx.strokeStyle='rgba(255,230,200,.8)';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x-Math.cos(a)*10,s.y-Math.sin(a)*10,16,a-.9,a+.9);ctx.stroke();continue}
     if(s.kind==='orb'){ctx.fillStyle='rgba(255,240,170,.3)';ctx.beginPath();ctx.arc(s.x,s.y,s.r*1.9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff6c9';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill()}
     else{const v=Math.hypot(s.vx,s.vy),ux=s.vx/v,uy=s.vy/v,enemy=s.owner==='e';
@@ -1073,6 +1207,7 @@ function draw(){
       ctx.fillStyle=enemy?'#ff7a64':'#eef6e6';ctx.beginPath();ctx.moveTo(s.x+ux*5,s.y+uy*5);ctx.lineTo(s.x-uy*3.5,s.y+ux*3.5);ctx.lineTo(s.x+uy*3.5,s.y-ux*3.5);ctx.fill()}}
 
   for(const g of rings){const k=g.life/g.max;
+    if(g.type==='cone'){ctx.fillStyle=`rgba(230,220,255,${.45*k})`;ctx.beginPath();ctx.moveTo(g.x,g.y);ctx.arc(g.x,g.y,g.r,g.ang-g.arc/2,g.ang+g.arc/2);ctx.closePath();ctx.fill();continue}
     if(g.type==='bolt'){ctx.strokeStyle=`rgba(207,227,255,${k})`;ctx.lineWidth=3;ctx.beginPath();let x=g.x,y=g.y-220;ctx.moveTo(x,y);
       for(let i=1;i<=6;i++){x=g.x+(i<6?(g.seed[i]-.5)*30:0);y=g.y-220+i*220/6;ctx.lineTo(x,y)}ctx.stroke();
       ctx.fillStyle=`rgba(207,227,255,${.35*k})`;ctx.beginPath();ctx.arc(g.x,g.y,26,0,Math.PI*2);ctx.fill()}
@@ -1121,6 +1256,27 @@ function drawPlayer(p){
 }
 function drawEnemy(e){
   shadow(e.x,e.y,e.r);const fl=e.flash>0;
+  if(e.type==='chief'){const a=Math.atan2(e.ay,e.ax),stun=e.state==='stun';
+    ctx.fillStyle=fl?'#ffffff':'#6d7f2e';ctx.strokeStyle='#2f3814';ctx.lineWidth=3;
+    for(const s of[-1,1]){ctx.beginPath();ctx.moveTo(e.x+s*(e.r-6),e.y-12);ctx.lineTo(e.x+s*(e.r+16),e.y-30);ctx.lineTo(e.x+s*(e.r+2),e.y-4);ctx.fill();ctx.stroke()}
+    ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fill();ctx.stroke();
+    if(!fl){ctx.fillStyle='#4a3a22';ctx.fillRect(e.x-e.r+4,e.y+8,(e.r-4)*2,7);
+      ctx.fillStyle=stun?'#f2d24a':e.state==='wind'||e.state==='charge'?'#ff5a3c':'#f2d24a';ctx.fillRect(e.x-12,e.y-8,6,5);ctx.fillRect(e.x+6,e.y-8,6,5);
+      ctx.fillStyle='#e9e1cf';ctx.fillRect(e.x-8,e.y+2,4,5);ctx.fillRect(e.x+4,e.y+2,4,5)}
+    ctx.save();ctx.translate(e.x,e.y);ctx.rotate(a+(e.state==='wind'&&e.atk==='slam'?-1.2:0));ctx.fillStyle='#6b4a2a';ctx.strokeStyle='#2b1a0c';ctx.lineWidth=2;
+    ctx.fillRect(e.r-4,-5,34,10);ctx.strokeRect(e.r-4,-5,34,10);ctx.beginPath();ctx.arc(e.r+32,0,10,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();
+    if(stun)for(let i=0;i<3;i++){const t=time*4+i*2.1;ctx.fillStyle='#ffd36a';ctx.fillRect(e.x+Math.cos(t)*22-2,e.y-e.r-12+Math.sin(t)*5,4,4)}
+    return}
+  if(e.type==='king'){const ph=e.phase||1;
+    if(ph>=3||e.inv>0){ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(e.x,e.y,e.r*.5,e.x,e.y,e.r*2.2);g.addColorStop(0,'rgba(150,90,220,.35)');g.addColorStop(1,'rgba(150,90,220,0)');
+      ctx.fillStyle=g;ctx.fillRect(e.x-e.r*2.2,e.y-e.r*2.2,e.r*4.4,e.r*4.4);ctx.globalCompositeOperation='source-over'}
+    ctx.fillStyle='#2a1f3a';ctx.beginPath();ctx.moveTo(e.x-e.r-8,e.y+e.r);ctx.lineTo(e.x,e.y-e.r*.4);ctx.lineTo(e.x+e.r+8,e.y+e.r);ctx.closePath();ctx.fill();
+    ctx.fillStyle=fl?'#ffffff':'#e4ddcd';ctx.strokeStyle='#6d665a';ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y-4,e.r*.82,0,Math.PI*2);ctx.fill();ctx.stroke();
+    if(!fl){const glow=ph>=2?'#c7a2ff':'#ff7a64';ctx.fillStyle='#1b1620';ctx.beginPath();ctx.arc(e.x-10,e.y-8,6,0,Math.PI*2);ctx.arc(e.x+10,e.y-8,6,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=glow;ctx.fillRect(e.x-12,e.y-10,4,4);ctx.fillRect(e.x+8,e.y-10,4,4);ctx.fillStyle='#1b1620';for(let i=-2;i<=2;i++)ctx.fillRect(e.x+i*5-1,e.y+8,3,6)}
+    ctx.fillStyle='#d9a441';ctx.strokeStyle='#7a5718';ctx.lineWidth=2;ctx.beginPath();const cy=e.y-e.r*.82-2;
+    ctx.moveTo(e.x-18,cy+4);ctx.lineTo(e.x-18,cy-10);ctx.lineTo(e.x-9,cy-3);ctx.lineTo(e.x,cy-14);ctx.lineTo(e.x+9,cy-3);ctx.lineTo(e.x+18,cy-10);ctx.lineTo(e.x+18,cy+4);ctx.closePath();ctx.fill();ctx.stroke();
+    return}
   if(e.type==='slime'){const sq=1+.12*Math.sin(time*12+e.id);
     ctx.fillStyle=fl?'#ffffff':'#5fa7ba';ctx.strokeStyle='#244e5a';ctx.lineWidth=2.5;
     ctx.beginPath();ctx.ellipse(e.x,e.y+2,e.r*sq,e.r/sq*.85,0,0,Math.PI*2);ctx.fill();ctx.stroke();
@@ -1151,11 +1307,14 @@ function updateHud(dt){
   $('#hNum').textContent=me.down?'戦闘不能':`HP ${me.hp} / ${me.max}`;
   $('#hRoom').innerHTML=`${ROOMS[S.room].name} <span class="note">/ ${ROOMS.length}</span>`;
   const left=S.enemies.length+S.spawns.length;const hl=$('#hLeft');
-  hl.className='left'+(S.doorOpen?' clear':'');hl.innerHTML=S.doorOpen?'<b>扉が開いた</b>':S.chest&&!S.chest.open?'<b>宝箱を開けよう</b>':`残りの敵 <b>${left}</b>`;
+  hl.className='left'+(S.doorOpen?' clear':'');hl.innerHTML=S.doorOpen?'<b>扉が開いた</b>':S.enemies.some(e=>e.boss)?'<b>ボスを倒せ</b>':S.chest&&!S.chest.open?'<b>宝箱を開けよう</b>':`残りの敵 <b>${left}</b>`;
   atkB.style.setProperty('--p',clamp(me.atkCd/c.atkCd,0,1).toFixed(3));sklB.style.setProperty('--p',clamp(me.skillCd/skillCdOf(me),0,1).toFixed(3));
   const it=me.item&&CAT[me.item.id],bag=it?`道具 <b>${it.name}</b> ×${me.item.n}`:'道具 なし';
   if(bagHtml!==bag){bagHtml=bag;$('#hBag').innerHTML=bag;$('#itmN').textContent=it?me.item.n:'';itmB.disabled=!it}
   if(S.cleared&&!S.doorOpen&&!me.offer&&Object.values(S.players).some(p=>p.offer))hl.innerHTML='<b>仲間が選択中…</b>';
+  const boss=S.enemies.find(e=>e.boss);const bb=$('#bossbar');
+  if(boss){bb.hidden=false;$('#bName').textContent=boss.name;$('#bHp').style.width=Math.max(0,boss.hp/boss.max*100)+'%';
+    $('#bPh').textContent=boss.type==='king'?['','第一段階','第二段階','最終段階'][boss.phase]||'':(boss.hp<boss.max*.5?'激怒':'')}else bb.hidden=true;
   updatePick(me);
 }
 let bagHtml='',pickSig='';
