@@ -259,19 +259,54 @@ const ENEMY={
   slime:{name:'スライム',r:16,hp:30,spd:70,touch:10},
   goblin:{name:'ゴブリン',r:15,hp:42,spd:118,touch:8},
   archer:{name:'骸骨弓兵',r:15,hp:34,spd:90,touch:6},
+  bat:{name:'コウモリ',r:11,hp:16,spd:170,touch:7},
+  shroom:{name:'爆弾キノコ',r:15,hp:26,spd:72,touch:0},
   chief:{name:'ゴブリンの親分',r:34,hp:420,spd:95,touch:18,boss:1},
   king:{name:'骸骨王',r:38,hp:1200,spd:70,touch:20,boss:1},
 };
-const P_A={x:300,y:230,w:64,h:64},P_B={x:836,y:230,w:64,h:64},P_C={x:300,y:506,w:64,h:64},P_D={x:836,y:506,w:64,h:64};
-const ROOMS=[
-  {name:'第一の間',pillars:[P_A,P_B,P_C,P_D],wave:[['slime',4]]},
-  {name:'第二の間',pillars:[{x:568,y:140,w:64,h:180},{x:568,y:480,w:64,h:180}],wave:[['slime',3],['goblin',2]]},
-  {name:'親分の間',boss:'chief',pillars:[P_A,P_B,P_C,P_D],wave:[['chief',1]]},
-  {name:'宝物庫',treasure:true,pillars:[{x:200,y:150,w:48,h:48},{x:952,y:150,w:48,h:48},{x:200,y:602,w:48,h:48},{x:952,y:602,w:48,h:48}],wave:[]},
-  {name:'第三の間',pillars:[{x:330,y:200,w:48,h:48},{x:330,y:552,w:48,h:48},{x:576,y:376,w:48,h:48},{x:822,y:200,w:48,h:48},{x:822,y:552,w:48,h:48}],wave:[['goblin',2],['archer',2],['slime',2]]},
-  {name:'第四の間',pillars:[{x:420,y:120,w:64,h:200},{x:716,y:480,w:64,h:200}],wave:[['goblin',3],['archer',3],['slime',3]]},
-  {name:'王の間',boss:'king',pillars:[{x:300,y:190,w:44,h:44},{x:856,y:190,w:44,h:44},{x:300,y:566,w:44,h:44},{x:856,y:566,w:44,h:44}],wave:[['king',1]]},
+// 柱の配置（左の入口と右の扉の前は空けてある）
+const sq=(x,y,w=48,h=48)=>({x,y,w,h});
+const LAYOUTS=[
+  [sq(300,230,64,64),sq(836,230,64,64),sq(300,506,64,64),sq(836,506,64,64)],
+  [sq(568,140,64,180),sq(568,480,64,180)],
+  [sq(330,200),sq(330,552),sq(576,376),sq(822,200),sq(822,552)],
+  [sq(420,120,64,200),sq(716,480,64,200)],
+  [sq(200,150),sq(952,150),sq(200,602),sq(952,602)],
+  [sq(500,370,200,60),sq(570,250,60,300)],
+  [sq(420,220),sq(732,220),sq(330,376),sq(822,376),sq(420,532),sq(732,532)],
+  [sq(360,180,120,48),sq(540,376,120,48),sq(720,572,120,48)],
+  [sq(300,190,44,44),sq(856,190,44,44),sq(300,566,44,44),sq(856,566,44,44)],
 ];
+const RTYPE={
+  battle:{name:'戦いの間',label:'戦闘',col:'#c9483a',hint:'敵を全滅させよう'},
+  elite:{name:'精鋭の間',label:'精鋭',col:'#e2a243',hint:'強敵ぞろい。報酬はレア以上が出やすい'},
+  fountain:{name:'癒しの泉',label:'泉',col:'#6fb3c4',hint:'泉に触れるとHPが回復する（1人1回）'},
+  treasure:{name:'宝物庫',label:'宝',col:'#d9a441',hint:'宝箱を開けよう'},
+  midboss:{name:'親分の間',label:'親分',col:'#c9483a',hint:''},
+  boss:{name:'王の間',label:'王',col:'#a46ae0',hint:''},
+};
+// 1回のプレイの流れ。choice の部屋は手前の扉2つから選ぶ
+const PLAN=['battle','choice','choice','midboss','choice','choice','choice','boss'];
+const DEPTH=PLAN.length;
+function nextOptions(S,d){
+  if(d>=DEPTH)return[];
+  if(PLAN[d]!=='choice')return[PLAN[d]];
+  const w={battle:5,elite:d>=2?3:1.5,fountain:d>=2?2:.6,treasure:S.treasureN?.6:2.2};
+  const pickOne=ex=>{const ks=Object.keys(w).filter(k=>k!==ex);let r=Math.random()*ks.reduce((a,k)=>a+w[k],0);for(const k of ks){r-=w[k];if(r<=0)return k}return ks[0]};
+  const a=pickOne(null);return[a,pickOne(a)];
+}
+// 深さに応じて敵の組み合わせを作る（コストの合計＝予算）
+const ECOST={slime:1,bat:1,goblin:2,archer:2,shroom:2},EFROM={slime:0,bat:1,goblin:1,archer:2,shroom:2};
+function genWaves(d,elite){
+  const budget=(4+d*1.5)*(elite?1.25:1),nw=d>=4?2:1,waves=[];
+  for(let w=0;w<nw;w++){
+    let b=nw===1?budget:budget*(w===0?.55:.6);const list=[];
+    const pool=Object.keys(ECOST).filter(t=>EFROM[t]<=d);
+    while(b>=1){const opts=pool.filter(t=>ECOST[t]<=b);if(!opts.length)break;const t=opts[Math.floor(Math.random()*opts.length)];list.push(t);b-=ECOST[t]}
+    waves.push(list);
+  }
+  return waves;
+}
 
 // ---------- 強化・遺物・道具のカタログ ----------
 // kind: up=強化 / relic=遺物 / item=道具（1種類だけ持てる）  rar: 1普通 2レア 3伝説  stack: 重ねて取れる  coop: 2人以上のときだけ出る
@@ -347,7 +382,7 @@ const KIND_NAME={up:'強化',relic:'遺物',item:'道具'},RAR_NAME=['','','レ�
 // ================= シミュレーション（ホストが計算する部分） =================
 // ここは描画・入力から切り離してあり、通信版ではホストだけがこれを動かして結果を配る
 function createSim(){
-  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,hazards:[],bossDead:false,kills:0,eid:1,startT:0,endT:0,ev:[]};
+  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,fountain:null,hazards:[],bossDead:false,rtype:'battle',rname:'',lay:0,doors:[],waves:[],treasureN:0,kills:0,eid:1,startT:0,endT:0,ev:[]};
 }
 function addPlayer(S,id,cls){
   const c=CLASSES[cls];
@@ -359,28 +394,40 @@ const nPlayers=S=>Object.keys(S.players).length;
 function startRun(S){
   S.phase='play';S.kills=0;S.startT=S.t;
   for(const p of Object.values(S.players)){const c=CLASSES[p.cls];Object.assign(p,{hp:c.hp,max:c.hp,down:false,rev:0,ups:{},item:null,offer:null,bearUsed:false,atkN:0})}
-  setupRoom(S,0);
+  setupRoom(S,0,'battle');
 }
-function setupRoom(S,i){
-  const R=ROOMS[i];
-  S.room=i;S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.hazards=[];S.bossDead=false;S.doorOpen=false;S.cleared=false;
-  S.chest=R.treasure?{x:W/2,y:H/2,open:false}:null;
+function setupRoom(S,i,type){
+  S.room=i;S.rtype=type;S.rname=RTYPE[type].name;
+  S.lay=type==='midboss'?0:type==='boss'?8:type==='treasure'?4:Math.floor(Math.random()*8);
+  S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.hazards=[];S.bossDead=false;S.doorOpen=false;S.cleared=false;
+  S.chest=type==='treasure'?{x:W/2,y:H/2,open:false}:null;
+  S.fountain=type==='fountain'?{x:W/2,y:H/2,used:{}}:null;
+  if(type==='treasure')S.treasureN++;
+  const nx=nextOptions(S,i+1);
+  S.doors=nx.length===1?[{y:H/2,type:nx[0]}]:nx.length===2?[{y:H*.3,type:nx[0]},{y:H*.7,type:nx[1]}]:[];
   const ps=Object.values(S.players);
   ps.forEach((p,k)=>{Object.assign(p,{x:WALL+56,y:H/2+(k-(ps.length-1)/2)*44,vx:0,vy:0,ix:0,iy:0,fx:1,fy:0,atkCd:0,skillCd:0,iframe:1,smoke:0,haste:0,pendSpin:0,dashT:0});
     p.shield=has(p,'r_feather')?1:0;
     if(p.down){p.down=false;p.hp=Math.round(p.max*.35);p.rev=0}});
-  const hpScale=(1+.12*i)*(1+.35*(ps.length-1));
-  let n=0;
-  for(const[type,count]of R.wave)for(let j=0;j<count;j++){
-    if(ENEMY[type].boss){S.spawns.push({type,x:W-260,y:H/2,t:1.6,hpScale:1+.6*(ps.length-1)});continue}
-    const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:1.1+n*.4,hpScale});n++}
-  S.ev.push({k:'room',room:i});
+  S.waves=type==='battle'||type==='elite'?genWaves(i,type==='elite'):type==='midboss'?[['chief']]:type==='boss'?[['king']]:[];
+  S.elite=type==='elite';
+  if(S.waves.length)spawnWave(S,true);
+  S.ev.push({k:'room',room:i,type,name:S.rname});
+}
+function spawnWave(S,first){
+  const list=S.waves.shift(),n=nPlayers(S);
+  const hpScale=(1+.1*S.room)*(1+.35*(n-1))*(S.elite?1.5:1);
+  list.forEach((type,j)=>{
+    if(ENEMY[type].boss){S.spawns.push({type,x:W-260,y:H/2,t:1.6,hpScale:1+.6*(n-1)});return}
+    const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:(first?1.1:.4)+j*.35,hpScale,elite:S.elite});
+  });
+  if(!first)S.ev.push({k:'wave'});
 }
 function spawnPos(S){
   for(let tries=0;tries<80;tries++){
     const x=WALL+40+Math.random()*(W-2*WALL-80),y=WALL+40+Math.random()*(H-2*WALL-80);
     if(x<WALL+260)continue;
-    if(ROOMS[S.room].pillars.some(q=>x>q.x-30&&x<q.x+q.w+30&&y>q.y-30&&y<q.y+q.h+30))continue;
+    if(LAYOUTS[S.lay].some(q=>x>q.x-30&&x<q.x+q.w+30&&y>q.y-30&&y<q.y+q.h+30))continue;
     if(Object.values(S.players).some(p=>Math.hypot(p.x-x,p.y-y)<240))continue;
     return[x,y];
   }
@@ -388,12 +435,12 @@ function spawnPos(S){
 }
 function wallCollide(S,e){
   let maxX=W-WALL-e.r;
-  if(S.doorOpen&&Math.abs(e.y-H/2)<DOOR-e.r)maxX=W-WALL+24;
+  if(S.doorOpen&&S.doors.some(d=>Math.abs(e.y-d.y)<DOOR-e.r))maxX=W-WALL+24;
   e.x=clamp(e.x,WALL+e.r,maxX);e.y=clamp(e.y,WALL+e.r,H-WALL-e.r);
-  for(const q of ROOMS[S.room].pillars){const cx=clamp(e.x,q.x,q.x+q.w),cy=clamp(e.y,q.y,q.y+q.h);let dx=e.x-cx,dy=e.y-cy,d=Math.hypot(dx,dy);
+  for(const q of LAYOUTS[S.lay]){const cx=clamp(e.x,q.x,q.x+q.w),cy=clamp(e.y,q.y,q.y+q.h);let dx=e.x-cx,dy=e.y-cy,d=Math.hypot(dx,dy);
     if(d<e.r){if(d===0){dx=0;dy=-1;d=1}e.x=cx+dx/d*e.r;e.y=cy+dy/d*e.r}}
 }
-const inWall=(S,x,y)=>x<WALL||y<WALL||x>W-WALL||y>H-WALL||ROOMS[S.room].pillars.some(q=>x>q.x&&x<q.x+q.w&&y>q.y&&y<q.y+q.h);
+const inWall=(S,x,y)=>x<WALL||y<WALL||x>W-WALL||y>H-WALL||LAYOUTS[S.lay].some(q=>x>q.x&&x<q.x+q.w&&y>q.y&&y<q.y+q.h);
 function alivePlayers(S){return Object.values(S.players).filter(p=>!p.down)}
 function nearestPlayer(S,x,y){let b=null,bd=1e9;for(const p of alivePlayers(S)){if(p.smoke>0)continue;const d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;b=p}}return b}
 function alliesNear(S,p,r){return alivePlayers(S).filter(q=>q!==p&&Math.hypot(q.x-p.x,q.y-p.y)<r)}
@@ -535,10 +582,10 @@ function explodeBomb(S,s){
 }
 
 // ---------- 3択の候補 ----------
-function makeOffer(S,p,relicOnly,boost){
+function makeOffer(S,p,relicOnly,boost=0){
   const luck=has(p,'r_coin'),multi=nPlayers(S)>1;
   let pool=CATALOG.filter(c=>(!c.cls||c.cls===p.cls)&&(c.stack||!has(p,c.id))&&(!c.coop||multi)&&(!relicOnly||c.kind==='relic')&&!(p.item&&p.item.id===c.id));
-  const rw=[0,70,25+12*luck+(relicOnly||boost?15:0),5+6*luck+(relicOnly||boost?5:0)],kw={up:1,relic:1.3,item:1.6};
+  const rw=[0,boost>=2?28:70,25+12*luck+(relicOnly||boost?15:0),5+6*luck+(relicOnly||boost?5:0)+(boost>=2?3:0)],kw={up:1,relic:1.3,item:1.6};
   const out=[];
   while(out.length<3&&pool.length){
     const ws=pool.map(c=>rw[c.rar]*kw[c.kind]);let r=Math.random()*ws.reduce((a,b)=>a+b,0),i=0;
@@ -572,6 +619,8 @@ function stepPlayer(S,p,inp,dt){
   if(inp.atk&&p.atkCd<=0)attack(S,p,mag>.15);
   if(p.qSkill){p.qSkill=false;skill(S,p)}
   if(p.qItem){p.qItem=false;useItem(S,p)}
+  if(S.fountain&&!S.fountain.used[p.id]&&Math.hypot(p.x-S.fountain.x,p.y-S.fountain.y)<52){
+    S.fountain.used[p.id]=1;heal(S,p,p.max*.6,false);S.ev.push({k:'drink',x:p.x,y:p.y,id:p.id})}
   if(S.chest&&!S.chest.open&&Math.hypot(p.x-S.chest.x,p.y-S.chest.y)<44){
     S.chest.open=true;S.ev.push({k:'chest',x:S.chest.x,y:S.chest.y});
     for(const q of Object.values(S.players))makeOffer(S,q,true);
@@ -588,6 +637,16 @@ function stepEnemy(S,e,dt){
   let dx=0,dy=0,dist=1e9;if(tgt){dx=tgt.x-e.x;dy=tgt.y-e.y;dist=Math.hypot(dx,dy)||1}
   const ux=tgt?dx/dist:0,uy=tgt?dy/dist:0;let mvx=0,mvy=0;
   if(T.boss){[mvx,mvy]=bossAI(S,e,dt,tgt,dist,ux,uy)}
+  else if(e.type==='bat'){
+    if(e.state==='back'){if(tgt){mvx=-ux*T.spd*.8;mvy=-uy*T.spd*.8}if(e.timer<=0)e.state='walk'}
+    else if(tgt){const w=Math.sin(S.t*7+e.id*1.7);mvx=(ux-uy*w*.9)*T.spd;mvy=(uy+ux*w*.9)*T.spd}
+  }else if(e.type==='shroom'){
+    if(e.state==='fuse'){if(e.timer<=0){
+      S.ev.push({k:'boom',x:e.x,y:e.y,r:85});hurtArea(S,e.x,e.y,85,22);
+      for(const o of S.enemies)if(o!==e&&o.hp>0&&Math.hypot(o.x-e.x,o.y-e.y)<85+o.r){const d=Math.hypot(o.x-e.x,o.y-e.y)||1;damageEnemy(S,o,20,(o.x-e.x)/d,(o.y-e.y)/d,300,null,'#ffb060')}
+      e.hp=0;S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,type:'shroom'});return}}
+    else if(tgt){mvx=ux*T.spd;mvy=uy*T.spd;if(dist<75){e.state='fuse';e.timer=.85}}
+  }
   else if(e.type==='slime'){
     if(tgt){const hop=.35+.65*Math.max(0,Math.sin(S.t*6+e.id));mvx=ux*T.spd*hop*1.5;mvy=uy*T.spd*hop*1.5}
   }else if(e.type==='goblin'){
@@ -612,7 +671,8 @@ function stepEnemy(S,e,dt){
   if(e.type==='chief'&&e.state==='charge'&&Math.hypot(e.x-ox,e.y-oy)<Math.hypot(mvx,mvy)*dt*.4){
     e.state='stun';e.timer=1.1;e.chain=0;S.ev.push({k:'boom',x:e.x+e.ax*e.r,y:e.y+e.ay*e.r,r:60});S.ev.push({k:'stun',x:e.x,y:e.y})}
   for(const p of alivePlayers(S)){const ddx=p.x-e.x,ddy=p.y-e.y,d=Math.hypot(ddx,ddy)||1;
-    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:e.type==='chief'&&e.state==='charge'?24:T.touch;hurtPlayer(S,p,dmg,ddx/d,ddy/d,e)}}
+    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:e.type==='chief'&&e.state==='charge'?24:T.touch;if(!dmg)continue;
+      if(e.type==='bat'){e.state='back';e.timer=.6}hurtPlayer(S,p,dmg,ddx/d,ddy/d,e)}}
 }
 
 // ---------- ボスの行動 ----------
@@ -620,7 +680,7 @@ function bossWind(e,atk,t){e.state='wind';e.atk=atk;e.timer=t;e.wmax=t}
 function eBullet(S,x,y,ang,spd,dmg=12){S.shots.push({id:S.eid++,owner:'e',x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,r:7,dmg,life:4,kind:'ebolt',bounce:0,dist:0,hits:[]})}
 function addMinion(S,type,x,y){
   x=clamp(x,WALL+30,W-WALL-30);y=clamp(y,WALL+30,H-WALL-30);
-  S.spawns.push({type,x,y,t:.5,hpScale:(1+.12*S.room)*(1+.35*(nPlayers(S)-1))});
+  S.spawns.push({type,x,y,t:.5,hpScale:(1+.1*S.room)*(1+.35*(nPlayers(S)-1))});
 }
 function hurtArea(S,x,y,r,dmg,knock=1){
   for(const p of alivePlayers(S)){const d=Math.hypot(p.x-x,p.y-y)||1;if(d<r+p.r)hurtPlayer(S,p,dmg,(p.x-x)/d*knock,(p.y-y)/d*knock)}
@@ -713,7 +773,7 @@ function stepSim(S,inputs,dt){
 
   for(const sp of S.spawns){sp.t-=dt;if(sp.t<=0){const T=ENEMY[sp.type],hp=Math.round(T.hp*sp.hpScale);
     S.enemies.push({id:S.eid++,type:sp.type,x:sp.x,y:sp.y,r:T.r,hp,max:hp,kx:0,ky:0,flash:0,freeze:0,frozen:0,burn:0,cd:T.boss?1.2:1+Math.random(),timer:0,state:'walk',ax:-1,ay:0,dir:Math.random()<.5?-1:1,
-      boss:!!T.boss,name:T.name,phase:1,n:0,chain:0,inv:0,atk:null,wmax:1});
+      boss:!!T.boss,elite:!!sp.elite,name:T.name,phase:1,n:0,chain:0,inv:0,atk:null,wmax:1});
     S.ev.push({k:T.boss?'bossin':'spawn',x:sp.x,y:sp.y,name:T.name})}}
   S.spawns=S.spawns.filter(s=>s.t>0);
 
@@ -756,22 +816,30 @@ function stepSim(S,inputs,dt){
   if(S.bossDead){S.bossDead=false;S.spawns=[];S.hazards=[];S.shots=S.shots.filter(s=>s.owner!=='e');
     for(const e of S.enemies)if(e.hp>0){e.hp=0;S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,type:e.type})}
     S.enemies=[]}
-  const last=S.room>=ROOMS.length-1;
-  if(!S.cleared&&!S.spawns.length&&!S.enemies.length&&(!S.chest||S.chest.open)){
+  const last=S.room>=DEPTH-1;
+  if(!S.cleared&&!S.spawns.length&&!S.enemies.length&&S.waves.length)spawnWave(S,false);
+  if(!S.cleared&&!S.spawns.length&&!S.enemies.length&&!S.waves.length&&(!S.chest||S.chest.open)){
     S.cleared=true;
-    if(!S.chest){
+    const fight=['battle','elite','midboss','boss'].includes(S.rtype);
+    if(fight){
       for(const p of Object.values(S.players))if(has(p,'regen'))heal(S,p,p.max*.25);
-      if(!last)for(const p of Object.values(S.players))makeOffer(S,p,false,!!ROOMS[S.room].boss);
+      if(!last)for(const p of Object.values(S.players))makeOffer(S,p,false,S.rtype==='elite'?2:S.rtype==='midboss'?1:0);
     }
-    S.ev.push({k:'clear',room:S.room,last,treasure:!!S.chest});
+    S.ev.push({k:'clear',room:S.room,last,type:S.rtype});
   }
   if(S.cleared&&!S.doorOpen&&Object.values(S.players).every(p=>!p.offer)){
     if(last){S.phase='win';S.endT=S.t;S.ev.push({k:'end',win:true});return}
-    S.doorOpen=true;S.ev.push({k:'door'});
+    S.doorOpen=true;S.ev.push({k:'door',n:S.doors.length});
   }
   const alive=alivePlayers(S);
   if(!alive.length){S.phase='lose';S.endT=S.t;S.ev.push({k:'end',win:false});return}
-  if(S.doorOpen&&alive.every(p=>p.x>W-WALL-30&&Math.abs(p.y-H/2)<DOOR))setupRoom(S,S.room+1);
+  if(S.doorOpen){
+    const at=alive.map(p=>p.x>W-WALL-30?S.doors.findIndex(d=>Math.abs(p.y-d.y)<DOOR):-1);
+    if(at.every(i=>i>=0)){
+      if(at.every(i=>i===at[0]))setupRoom(S,S.room+1,S.doors[at[0]].type);
+      else if(S.t-(S.splitT||0)>3){S.splitT=S.t;S.ev.push({k:'split'})}
+    }
+  }
 }
 
 // ================= クライアント（入力・描画・演出・通信） =================
@@ -903,7 +971,7 @@ function joinRoom(){
   peer.on('error',err=>{status(errMsg(err),true);if(mode!=='client'){resetNet();renderLobby()}else lostHost('通信が途切れました')});
 }
 function lostHost(msg){
-  resetNet();S=createSim();setupRoom(S,0);S.ev.length=0;
+  resetNet();S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
   $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);renderLobby();status(msg,true);
 }
 function onClientData(d){
@@ -914,7 +982,7 @@ function onClientData(d){
   else if(d.t==='lobby'){members=d.members||{};
     if(members[MY]&&members[MY].cls)myCls=members[MY].cls;
     else if(members[MY]&&takenBy(myCls)){const free=Object.keys(CLASSES).find(k=>!takenBy(k));if(free){myCls=free;send(hostConn,{t:'pick',cls:free})}}
-    if(d.show){S=createSim();setupRoom(S,0);S.ev.length=0;snapA=snapB=null;$('#result').hidden=true;$('#lobby').hidden=false;showHud(false)}
+    if(d.show){S=createSim();setupRoom(S,0,'battle');S.ev.length=0;snapA=snapB=null;$('#result').hidden=true;$('#lobby').hidden=false;showHud(false)}
     renderLobby()}
   else if(d.t==='snap'){
     snapA=snapB;tA=tB;snapB=d.s;tB=performance.now();
@@ -936,14 +1004,14 @@ function buildClientView(){
   const B=snapB,A=snapA&&snapA.room===B.room?snapA:null;
   const al=A?clamp((performance.now()-tB)/Math.max(16,tB-tA),0,1):1;
   const players={};for(const p of lerpList(A&&A.players,B.players,al))players[p.id]=p;
-  S={t:B.t,phase:B.phase,room:B.room,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,hazards:B.hazards||[],kills:B.kills,startT:B.startT,endT:B.endT,
+  S={t:B.t,phase:B.phase,room:B.room,rtype:B.rtype,rname:B.rname,lay:B.lay,doors:B.doors||[],fountain:B.fountain,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,hazards:B.hazards||[],kills:B.kills,startT:B.startT,endT:B.endT,
     players,enemies:lerpList(A&&A.enemies,B.enemies,al),shots:lerpList(A&&A.shots,B.shots,al),zones:B.zones,spawns:B.spawns,ev:[]};
 }
 const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
 function packState(S){
-  return{t:r1(S.t),phase:S.phase,room:S.room,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,hazards:S.hazards.map(h=>({x:r1(h.x),y:r1(h.y),r:h.r,t:r2(h.t),max:h.max})),kills:S.kills,startT:S.startT,endT:S.endT,
+  return{t:r1(S.t),phase:S.phase,room:S.room,rtype:S.rtype,rname:S.rname,lay:S.lay,doors:S.doors,fountain:S.fountain,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,hazards:S.hazards.map(h=>({x:r1(h.x),y:r1(h.y),r:h.r,t:r2(h.t),max:h.max})),kills:S.kills,startT:S.startT,endT:S.endT,
     players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r,ups:p.ups,item:p.item,offer:p.offer,smoke:r2(p.smoke),shield:p.shield,haste:r2(p.haste)})),
-    enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0,boss:e.boss,name:e.name,phase:e.phase,atk:e.atk,wmax:e.wmax,inv:r2(e.inv)})),
+    enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0,boss:e.boss,elite:e.elite,name:e.name,phase:e.phase,atk:e.atk,wmax:e.wmax,inv:r2(e.inv)})),
     shots:S.shots.map(s=>({id:s.id,x:r1(s.x),y:r1(s.y),vx:r1(s.vx),vy:r1(s.vy),kind:s.kind,owner:s.owner,r:s.r})),
     zones:S.zones.map(z=>({x:r1(z.x),y:r1(z.y),r:z.r,life:r2(z.life)})),
     spawns:S.spawns.map(s=>({x:r1(s.x),y:r1(s.y),t:r2(s.t)}))};
@@ -994,7 +1062,7 @@ $('#leave').addEventListener('click',()=>{resetNet();renderLobby();status('部�
 $('#go').addEventListener('click',start);
 $('#again').addEventListener('click',start);
 $('#back').addEventListener('click',()=>{
-  S=createSim();setupRoom(S,0);S.ev.length=0;
+  S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
   $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);
   if(mode==='host')broadcastLobby(true);
   renderLobby();
@@ -1017,8 +1085,8 @@ function start(){
   startRun(S);
   // 確認用：URLの末尾に #boss1 / #boss2 を付けると、強化を数個持った状態でボス部屋から始まる
   const jump=(location.hash||'').match(/^#boss([12])$/);
-  if(jump){const room=jump[1]==='1'?2:6;for(const p of Object.values(S.players))for(let k=0;k<(room===2?2:5);k++){makeOffer(S,p,false);chooseOffer(S,p,Math.floor(Math.random()*p.offer.length))}
-    S.ev.length=0;setupRoom(S,room)}
+  if(jump){const room=jump[1]==='1'?3:7;for(const p of Object.values(S.players))for(let k=0;k<(room===2?2:5);k++){makeOffer(S,p,false);chooseOffer(S,p,Math.floor(Math.random()*p.offer.length))}
+    S.ev.length=0;setupRoom(S,room,room===3?'midboss':'boss')}
   netInputs={};lastSkillN={};lastItemN={};evQueue=[];snapAcc=1;pickSig='';
   parts=[];nums=[];arcs=[];rings=[];shake=0;bagHtml='';
   $('#lobby').hidden=true;$('#result').hidden=true;showHud(true);cv.focus();setMeHud();
@@ -1035,7 +1103,7 @@ function sparks(x,y,kx,ky,color){const b=Math.atan2(ky,kx);for(let i=0;i<7;i++){
 function num(x,y,t,color){nums.push({x:x+(Math.random()-.5)*12,y,t:String(t),color,life:.75,max:.75})}
 function toast(t){if(bannerT>0)return;banner(`<small>${t}</small>`,1.6)}
 function banner(html,sec=2){const b=$('#banner');b.innerHTML=html;b.classList.add('show');bannerT=sec}
-const ENEMY_DEATH={slime:'#6fb3c4',goblin:'#9aab45',archer:'#e2dccd'};
+const ENEMY_DEATH={slime:'#6fb3c4',goblin:'#9aab45',archer:'#e2dccd',bat:'#6b5582',shroom:'#c9483a'};
 function handleEvents(list){
   for(const v of list){
     switch(v.k){
@@ -1053,8 +1121,11 @@ function handleEvents(list){
       case'spark':sparks(v.x,v.y,v.kx,v.ky,'#bfae8f');break;
       case'spawn':burst(v.x,v.y,'#7a2a3a',14,140);break;
       case'left':banner(`${slotName(v.id)}が退出しました`,2);break;
-      case'room':banner(`${ROOMS[v.room].name}<small>敵を全滅させよう</small>`,1.8);break;
-      case'clear':if(!v.last)banner(v.treasure?'宝箱を開けた！<small>遺物を1つ選ぼう</small>':'制圧！<small>報酬を1つ選ぼう</small>',2.2);else banner('最後の部屋を制圧！',2);break;
+      case'room':if(RTYPE[v.type].hint)banner(`${v.name}<small>${RTYPE[v.type].hint}</small>`,2);break;
+      case'wave':banner('敵の増援が来た！',1.4);break;
+      case'split':banner('<small>全員で同じ扉に集まろう</small>',1.6);break;
+      case'drink':burst(v.x,v.y,'#8fe08a',16,180);burst(S.fountain?S.fountain.x:v.x,S.fountain?S.fountain.y:v.y,'#9fd8e6',18,200);break;
+      case'clear':if(v.type==='fountain')break;if(!v.last)banner(v.type==='treasure'?'宝箱を開けた！<small>遺物を1つ選ぼう</small>':'制圧！<small>報酬を1つ選ぼう</small>',2.2);else banner('最後の部屋を制圧！',2);break;
       case'bossin':banner(`${v.name}が現れた！`,2);shake=Math.max(shake,8);burst(v.x,v.y,'#7a2a3a',30,260);break;
       case'bossdown':banner(`${v.name}を倒した！`,2.6);shake=Math.max(shake,14);burst(v.x,v.y,'#e2a243',50,380);rings.push({x:v.x,y:v.y,r:200,life:.7,max:.7,color:'rgba(226,162,67,A)'});break;
       case'phase':banner(v.phase===3?`${v.name}が本気を出した！<small>攻撃がさらに激しくなる</small>`:`${v.name}の様子が変わった！`,2.4);shake=Math.max(shake,12);rings.push({x:v.x,y:v.y,r:220,life:.6,max:.6,color:'rgba(150,90,220,A)'});break;
@@ -1063,7 +1134,7 @@ function handleEvents(list){
       case'cone':rings.push({type:'cone',x:v.x,y:v.y,ang:v.ang,arc:v.arc,r:v.r,life:.3,max:.3});shake=Math.max(shake,5);break;
       case'stun':num(v.x,v.y-50,'ふらふら','#ffd36a');shake=Math.max(shake,9);break;
       case'immune':if(Math.random()<.2)num(v.x,v.y-10,'無効','#a8997f');break;
-      case'door':banner(`扉が開いた<small>${Object.keys(S.players).length>1?'全員が右の扉の前に集まると次の部屋へ':'右の扉へ進もう'}</small>`,2.4);break;
+      case'door':banner(v.n>1?`扉が開いた<small>${Object.keys(S.players).length>1?'進む部屋を選んで、全員で同じ扉へ':'進む部屋を選んで扉へ'}</small>`:`扉が開いた<small>${Object.keys(S.players).length>1?'全員が右の扉の前に集まると次の部屋へ':'右の扉へ進もう'}</small>`,2.4);break;
       case'boom':rings.push({x:v.x,y:v.y,r:v.r,life:.35,max:.35,color:'rgba(255,176,96,A)'});burst(v.x,v.y,'#ffb060',18,260);shake=Math.max(shake,6);break;
       case'bolt':rings.push({type:'bolt',x:v.x,y:v.y,life:.25,max:.25,seed:[0,Math.random(),Math.random(),Math.random(),Math.random(),Math.random()]});break;
       case'bell':rings.push({x:v.x,y:v.y,r:220,life:.6,max:.6,color:'rgba(143,224,138,A)'});break;
@@ -1081,10 +1152,10 @@ function showResult(){
   if(S.phase!=='win'&&S.phase!=='lose')return;
   const win=S.phase==='win';
   $('#rTitle').textContent=win?'踏破！':'全滅…';
-  $('#rSub').textContent=win?'試しの地下道を突破しました':`${ROOMS[S.room].name}で力尽きました`;
+  $('#rSub').textContent=win?'試しの地下道を突破しました':`${S.rname}で力尽きました`;
   const sec=Math.max(0,Math.round(S.endT-S.startT));$('#rTime').textContent=`${sec/60|0}:${String(sec%60).padStart(2,'0')}`;
   const me=S.players[MY];$('#rGot').innerHTML=me?'手に入れたもの<br><b>'+(ownedText(me).replace('所持：',''))+'</b>':'';
-  $('#rKills').textContent=S.kills;$('#rRoom').textContent=`${S.room+1} / ${ROOMS.length}`;
+  $('#rKills').textContent=S.kills;$('#rRoom').textContent=`${S.room+1} / ${DEPTH}`;
   $('#rActions').hidden=mode==='client';$('#rWait').hidden=mode!=='client';
   $('#again').textContent=mode==='host'?'全員でもう一度':'同じ職業でもう一度';
   $('#back').textContent=mode==='host'?'全員で職業を選び直す':'職業を選び直す';
@@ -1111,7 +1182,7 @@ function roomBg(i){
   // 入ってきた扉（閉じた木戸）
   g.fillStyle='#3a2816';g.fillRect(4,H/2-DOOR,WALL-6,DOOR*2);g.strokeStyle='#241809';g.lineWidth=2;
   for(let y=H/2-DOOR+12;y<H/2+DOOR;y+=14){g.beginPath();g.moveTo(4,y);g.lineTo(WALL-2,y);g.stroke()}
-  for(const p of ROOMS[i].pillars){
+  for(const p of LAYOUTS[i]){
     g.fillStyle='rgba(0,0,0,.35)';g.fillRect(p.x+6,p.y+10,p.w,p.h);
     g.fillStyle='#3b332a';g.fillRect(p.x,p.y,p.w,p.h);
     g.fillStyle='#56493a';g.fillRect(p.x,p.y,p.w,p.h-12);
@@ -1139,8 +1210,14 @@ function draw(){
   const sx=(Math.random()-.5)*shake*2,sy=(Math.random()-.5)*shake*2;
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#0e0c0a';ctx.fillRect(0,0,cv.width,cv.height);
   ctx.setTransform(dpr*zoom,0,0,dpr*zoom,(-cx*zoom+sx)*dpr,(-cy*zoom+sy)*dpr);
-  ctx.drawImage(roomBg(S.room),0,0);
+  ctx.drawImage(roomBg(S.lay),0,0);
   drawDoor();
+  if(S.fountain){const f=S.fountain,mine=f.used&&f.used[MY];
+    ctx.fillStyle='#3b332a';ctx.beginPath();ctx.arc(f.x,f.y,46,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#56493a';ctx.lineWidth=5;ctx.stroke();
+    ctx.fillStyle=mine?'#2c4a52':'#3f8fa3';ctx.beginPath();ctx.arc(f.x,f.y,36,0,Math.PI*2);ctx.fill();
+    if(!mine){ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(f.x,f.y,6,f.x,f.y,90);g.addColorStop(0,'rgba(111,179,196,.3)');g.addColorStop(1,'rgba(111,179,196,0)');
+      ctx.fillStyle=g;ctx.fillRect(f.x-90,f.y-90,180,180);ctx.globalCompositeOperation='source-over';
+      for(let i=0;i<3;i++){const r=(time*20+i*12)%36;ctx.strokeStyle=`rgba(220,245,255,${.5*(1-r/36)})`;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(f.x,f.y,r,0,Math.PI*2);ctx.stroke()}}}
   if(S.chest){const c=S.chest;shadow(c.x,c.y+4,22);
     if(!c.open){const gl=.5+.5*Math.sin(time*3);ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(c.x,c.y,4,c.x,c.y,70);
       g.addColorStop(0,`rgba(226,162,67,${.18+.12*gl})`);g.addColorStop(1,'rgba(226,162,67,0)');ctx.fillStyle=g;ctx.fillRect(c.x-70,c.y-70,140,140);ctx.globalCompositeOperation='source-over'}
@@ -1227,14 +1304,21 @@ function draw(){
 }
 
 function drawDoor(){
-  const x=W-WALL,y=H/2-DOOR;
-  if(S.doorOpen){ctx.fillStyle='#070605';ctx.fillRect(x,y,WALL,DOOR*2);
-    const pulse=.5+.5*Math.sin(time*5);ctx.fillStyle=`rgba(226,162,67,${.25+.35*pulse})`;
-    ctx.beginPath();ctx.moveTo(x-34+pulse*6,H/2-14);ctx.lineTo(x-14+pulse*6,H/2);ctx.lineTo(x-34+pulse*6,H/2+14);ctx.fill();
-    ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(x+10,H/2,4,x+10,H/2,110);g.addColorStop(0,'rgba(226,162,67,.22)');g.addColorStop(1,'rgba(226,162,67,0)');
-    ctx.fillStyle=g;ctx.fillRect(x-110,H/2-110,220,220);ctx.globalCompositeOperation='source-over'}
-  else{ctx.fillStyle='#0b0908';ctx.fillRect(x,y,WALL,DOOR*2);ctx.fillStyle='#5a5148';
-    for(let by=y+6;by<y+DOOR*2;by+=14)ctx.fillRect(x+2,by,WALL-4,4);ctx.fillRect(x+6,y,4,DOOR*2);ctx.fillRect(x+WALL-10,y,4,DOOR*2)}
+  const x=W-WALL;
+  for(const d of S.doors||[]){const y=d.y-DOOR,R=RTYPE[d.type];
+    if(S.doorOpen){ctx.fillStyle='#070605';ctx.fillRect(x,y,WALL,DOOR*2);
+      const pulse=.5+.5*Math.sin(time*5);ctx.fillStyle=`rgba(226,162,67,${.25+.35*pulse})`;
+      ctx.beginPath();ctx.moveTo(x-34+pulse*6,d.y+8);ctx.lineTo(x-16+pulse*6,d.y+20);ctx.lineTo(x-34+pulse*6,d.y+32);ctx.fill();
+      ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(x+10,d.y,4,x+10,d.y,110);g.addColorStop(0,'rgba(226,162,67,.2)');g.addColorStop(1,'rgba(226,162,67,0)');
+      ctx.fillStyle=g;ctx.fillRect(x-110,d.y-110,220,220);ctx.globalCompositeOperation='source-over'}
+    else{ctx.fillStyle='#0b0908';ctx.fillRect(x,y,WALL,DOOR*2);ctx.fillStyle='#5a5148';
+      for(let by=y+6;by<y+DOOR*2;by+=14)ctx.fillRect(x+2,by,WALL-4,4);ctx.fillRect(x+6,y,4,DOOR*2);ctx.fillRect(x+WALL-10,y,4,DOOR*2)}
+    // 行き先の札
+    ctx.font=`15px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';
+    const tw=ctx.measureText(R.label).width+16,lx=x-tw/2-6,ly=d.y-24;
+    ctx.fillStyle='rgba(14,12,10,.85)';ctx.fillRect(lx-tw/2,ly-11,tw,22);ctx.strokeStyle=R.col;ctx.lineWidth=1.5;ctx.strokeRect(lx-tw/2,ly-11,tw,22);
+    ctx.fillStyle=R.col;ctx.fillText(R.label,lx,ly+1);
+  }
 }
 
 function drawPlayer(p){
@@ -1277,7 +1361,18 @@ function drawEnemy(e){
     ctx.fillStyle='#d9a441';ctx.strokeStyle='#7a5718';ctx.lineWidth=2;ctx.beginPath();const cy=e.y-e.r*.82-2;
     ctx.moveTo(e.x-18,cy+4);ctx.lineTo(e.x-18,cy-10);ctx.lineTo(e.x-9,cy-3);ctx.lineTo(e.x,cy-14);ctx.lineTo(e.x+9,cy-3);ctx.lineTo(e.x+18,cy-10);ctx.lineTo(e.x+18,cy+4);ctx.closePath();ctx.fill();ctx.stroke();
     return}
-  if(e.type==='slime'){const sq=1+.12*Math.sin(time*12+e.id);
+  if(e.elite){ctx.strokeStyle=`rgba(226,162,67,${.55+.25*Math.sin(time*5+e.id)})`;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(e.x,e.y+e.r*.8,e.r*1.25,e.r*.55,0,0,Math.PI*2);ctx.stroke()}
+  if(e.type==='bat'){const fl2=Math.sin(time*26+e.id)*.6;
+    ctx.fillStyle=fl?'#ffffff':'#4b3b5e';ctx.strokeStyle='#221a2c';ctx.lineWidth=1.5;
+    for(const sd of[-1,1]){ctx.beginPath();ctx.moveTo(e.x+sd*4,e.y-2);ctx.lineTo(e.x+sd*22,e.y-10-fl2*10);ctx.lineTo(e.x+sd*16,e.y+2);ctx.lineTo(e.x+sd*10,e.y-2+fl2*3);ctx.closePath();ctx.fill();ctx.stroke()}
+    ctx.beginPath();ctx.arc(e.x,e.y-2,8,0,Math.PI*2);ctx.fill();ctx.stroke();
+    if(!fl){ctx.fillStyle='#ff6a5a';ctx.fillRect(e.x-4,e.y-4,2,2);ctx.fillRect(e.x+2,e.y-4,2,2)}}
+  else if(e.type==='shroom'){const fuse=e.state==='fuse',blink=fuse&&Math.floor(time*14)%2===0;
+    if(fuse){ctx.fillStyle='rgba(201,72,58,.18)';ctx.beginPath();ctx.arc(e.x,e.y,85,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(255,120,100,.7)';ctx.lineWidth=2;ctx.stroke()}
+    ctx.fillStyle='#d9cdb4';ctx.strokeStyle='#6d5f48';ctx.lineWidth=2;ctx.fillRect(e.x-6,e.y-2,12,14);ctx.strokeRect(e.x-6,e.y-2,12,14);
+    ctx.fillStyle=fl||blink?'#ffffff':'#b8352a';ctx.strokeStyle='#5a1610';ctx.beginPath();ctx.ellipse(e.x,e.y-4,e.r+2,e.r*.75,0,Math.PI,0);ctx.closePath();ctx.fill();ctx.stroke();
+    if(!fl&&!blink){ctx.fillStyle='#f2e6d0';for(const[a,b]of[[-7,-10],[3,-13],[9,-7]]){ctx.beginPath();ctx.arc(e.x+a,e.y+b,2.5,0,Math.PI*2);ctx.fill()}}}
+  else if(e.type==='slime'){const sq=1+.12*Math.sin(time*12+e.id);
     ctx.fillStyle=fl?'#ffffff':'#5fa7ba';ctx.strokeStyle='#244e5a';ctx.lineWidth=2.5;
     ctx.beginPath();ctx.ellipse(e.x,e.y+2,e.r*sq,e.r/sq*.85,0,0,Math.PI*2);ctx.fill();ctx.stroke();
     if(!fl){ctx.fillStyle='rgba(255,255,255,.45)';ctx.beginPath();ctx.ellipse(e.x-5,e.y-4,4,2.5,-.4,0,Math.PI*2);ctx.fill();
@@ -1305,9 +1400,9 @@ function updateHud(dt){
   const me=S.players[MY];if(!me)return;const c=CLASSES[me.cls];
   $('#hHp').style.width=(me.hp/me.max*100)+'%';$('#hHp').style.background=me.hp/me.max>.3?'#8fe08a':'#e0c25a';
   $('#hNum').textContent=me.down?'戦闘不能':`HP ${me.hp} / ${me.max}`;
-  $('#hRoom').innerHTML=`${ROOMS[S.room].name} <span class="note">/ ${ROOMS.length}</span>`;
+  $('#hRoom').innerHTML=`${S.rname} <span class="note">${S.room+1} / ${DEPTH}</span>`;
   const left=S.enemies.length+S.spawns.length;const hl=$('#hLeft');
-  hl.className='left'+(S.doorOpen?' clear':'');hl.innerHTML=S.doorOpen?'<b>扉が開いた</b>':S.enemies.some(e=>e.boss)?'<b>ボスを倒せ</b>':S.chest&&!S.chest.open?'<b>宝箱を開けよう</b>':`残りの敵 <b>${left}</b>`;
+  hl.className='left'+(S.doorOpen?' clear':'');hl.innerHTML=S.doorOpen?'<b>扉が開いた</b>':S.enemies.some(e=>e.boss)?'<b>ボスを倒せ</b>':S.chest&&!S.chest.open?'<b>宝箱を開けよう</b>':S.fountain&&!S.cleared?'':S.rtype==='fountain'&&!S.doorOpen?'<b>泉で回復しよう</b>':`残りの敵 <b>${left}</b>`;
   atkB.style.setProperty('--p',clamp(me.atkCd/c.atkCd,0,1).toFixed(3));sklB.style.setProperty('--p',clamp(me.skillCd/skillCdOf(me),0,1).toFixed(3));
   const it=me.item&&CAT[me.item.id],bag=it?`道具 <b>${it.name}</b> ×${me.item.n}`:'道具 なし';
   if(bagHtml!==bag){bagHtml=bag;$('#hBag').innerHTML=bag;$('#itmN').textContent=it?me.item.n:'';itmB.disabled=!it}
@@ -1328,7 +1423,7 @@ function updatePick(me){
   if(sig===pickSig||(pickSig==='sent'&&sig))return;pickSig=sig;
   if(!sig){box.hidden=true;$('#keys').hidden=coarse.matches||S.phase!=='play';return}
   $('#keys').hidden=true;
-  const treasure=!!S.chest;
+  const treasure=S.rtype==='treasure';
   $('#pickTitle').textContent=treasure?'宝箱から遺物を1つ選ぶ':'報酬を1つ選ぶ';
   $('#pickNote').textContent=coarse.matches?'':'1〜3キーでも選べます';
   const wrap=$('#picks');wrap.innerHTML='';
@@ -1375,7 +1470,7 @@ function loop(now){
   updateHud(dt);draw();requestAnimationFrame(loop);
 }
 // ロビーの背景用に部屋だけ見せておく
-setupRoom(S,0);S.ev.length=0;renderLobby();
+setupRoom(S,0,'battle');S.ev.length=0;renderLobby();
 requestAnimationFrame(loop);
 })();
 </script>
