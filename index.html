@@ -265,7 +265,7 @@ Object.assign(CLASSES,{
   knight:{name:'騎士',glyph:'騎',color:'#7f9bc4',dark:'#2d3e5c',role:'盾役',atk:'盾殴り',skill:'挑発の盾',
     text:'盾で殴って敵を押し返す。スキル中は受けるダメージが半分になり、周りの敵の狙いを自分に集める。',hp:160,speed:200,atkCd:.45,skillCd:7},
   mage:{name:'魔法使い',glyph:'魔',color:'#d9733a',dark:'#6a2d10',role:'範囲攻撃',atk:'火球',skill:'隕石',
-    text:'当たると小さく爆発する火球を撃つ。スキルは少し先に隕石を落とし、広い範囲に大ダメージ。とても打たれ弱い。',hp:80,speed:205,atkCd:.55,skillCd:5},
+    text:'当たると小さく爆発する火球を撃つ。スキルは少し先に隕石を落とし、広い範囲に大ダメージ。打たれ弱い。',hp:90,speed:205,atkCd:.55,skillCd:5},
   thief:{name:'盗賊',glyph:'盗',color:'#8a8f98',dark:'#33363c',role:'高速・一撃',atk:'短剣',skill:'影走り',
     text:'素早く短剣で斬る。仲間を狙っている敵や、攻撃の構え・ふらつきで隙のある敵を斬ると2倍のダメージ。スキルは無敵で駆け抜け、通り道の敵を斬る。',hp:100,speed:270,atkCd:.2,skillCd:3},
   bard:{name:'吟遊詩人',glyph:'詩',color:'#5fbf9a',dark:'#1f5a44',role:'支援',atk:'音符',skill:'戦いの歌',
@@ -316,8 +316,11 @@ function nextOptions(S,d){
 }
 // 深さに応じて敵の組み合わせを作る（コストの合計＝予算）
 const ECOST={slime:1,bat:1,goblin:2,archer:2,shroom:2},EFROM={slime:0,bat:1,goblin:1,archer:2,shroom:2};
-function genWaves(d,elite){
-  const budget=(4+d*1.5)*(elite?1.25:1),nw=d>=4?2:1,waves=[];
+// 人数ごとの補正（2人は控えめ、4人は大きめ）
+const PARTY={count:[1,1,1.35,2.1,2.9],boss:[1,1,1.8,3.3,5.0],tempo:[1,1,1.12,1.45,1.8],dmg:[1,1.05,1.4,1.3,1.35]};
+const pk=(k,n)=>PARTY[k][Math.min(4,Math.max(1,n))];
+function genWaves(d,elite,np=1){
+  const budget=(4+d*1.5+(d>=4?(d-3)*1.2:0))*(elite?1.25:1)*pk('count',np),nw=d>=4?2:1,waves=[];
   for(let w=0;w<nw;w++){
     let b=nw===1?budget:budget*(w===0?.55:.6);const list=[];
     const pool=Object.keys(ECOST).filter(t=>EFROM[t]<=d);
@@ -333,21 +336,21 @@ const CATALOG=[
   // 共通強化
   {id:'pow',kind:'up',rar:1,stack:1,name:'力の結晶',desc:'攻撃力 +15%'},
   {id:'vit',kind:'up',rar:1,stack:1,name:'生命の実',desc:'最大HP +20（その分回復）'},
-  {id:'wind',kind:'up',rar:1,stack:1,name:'疾風の羽',desc:'移動速度 +10%'},
+  {id:'wind',kind:'up',rar:1,stack:1,name:'疾風の羽',desc:'移動速度 +15%'},
   {id:'focus',kind:'up',rar:1,stack:1,name:'集中の印',desc:'スキルの待ち時間 −15%'},
   {id:'light',kind:'up',rar:1,name:'身軽な鎧',desc:'被弾後の無敵時間 +0.3秒'},
   {id:'rapid',kind:'up',rar:1,stack:1,name:'連撃の心得',desc:'通常攻撃の間隔 −12%'},
   {id:'tough',kind:'up',rar:1,stack:1,name:'頑丈な体',desc:'受けるダメージ −10%'},
   {id:'regen',kind:'up',rar:1,name:'再生の加護',desc:'部屋を制圧するたびHPを25%回復'},
   {id:'crit',kind:'up',rar:1,stack:1,name:'弱点看破',desc:'10%の確率で会心（ダメージ2倍）'},
-  {id:'heavy',kind:'up',rar:1,stack:1,name:'重い一撃',desc:'敵を吹き飛ばす力 +40%'},
+  {id:'heavy',kind:'up',rar:1,stack:1,name:'重い一撃',desc:'敵を吹き飛ばす力 +40%、ダメージ +8%'},
   {id:'medic',kind:'up',rar:1,name:'手当ての心得',desc:'受ける回復量 +30%'},
   {id:'bear',kind:'up',rar:2,name:'不屈',desc:'倒れるほどの攻撃を1度だけHP1で耐える'},
   // 剣士
   {id:'s_wide',cls:'sword',kind:'up',rar:1,name:'大振り',desc:'斬撃の範囲が広がる'},
   {id:'s_twin',cls:'sword',kind:'up',rar:2,name:'二重回転',desc:'回転斬りがもう1回転する'},
   {id:'s_drain',cls:'sword',kind:'up',rar:1,name:'吸命の刃',desc:'斬撃が当たるたびHP+1'},
-  {id:'s_dash',cls:'sword',kind:'up',rar:1,name:'突進斬り',desc:'踏み込みが長くなり、踏み込み中は無敵'},
+  {id:'s_dash',cls:'sword',kind:'up',rar:1,name:'突進斬り',desc:'踏み込みが長くなり、踏み込み中は無敵。斬撃ダメージ +30%'},
   {id:'s_wave',cls:'sword',kind:'up',rar:2,name:'剣気',desc:'斬撃と同時に短い衝撃波が飛ぶ'},
   {id:'s_spin',cls:'sword',kind:'up',rar:1,name:'旋風の型',desc:'回転斬りの待ち時間 −30%'},
   // 弓使い
@@ -356,7 +359,7 @@ const CATALOG=[
   {id:'a_five',cls:'archer',kind:'up',rar:1,name:'五方射ち',desc:'スキルの矢が5本になる'},
   {id:'a_pierce',cls:'archer',kind:'up',rar:2,name:'貫き矢',desc:'通常の矢も敵を貫通する'},
   {id:'a_long',cls:'archer',kind:'up',rar:1,name:'強弓',desc:'矢が速く、遠くまで届く'},
-  {id:'a_snipe',cls:'archer',kind:'up',rar:1,name:'狙い撃ち',desc:'遠くの敵ほどダメージが増える（最大1.5倍）'},
+  {id:'a_snipe',cls:'archer',kind:'up',rar:1,name:'狙い撃ち',desc:'遠くの敵ほどダメージが増える（最大1.8倍）'},
   // 僧侶
   {id:'p_mend',cls:'priest',kind:'up',rar:1,name:'癒しの光弾',desc:'光弾が仲間に当たるとHP+6',coop:1},
   {id:'p_big',cls:'priest',kind:'up',rar:1,name:'大聖域',desc:'聖域の範囲 +40%'},
@@ -367,7 +370,7 @@ const CATALOG=[
   // 騎士
   {id:'k_wall',cls:'knight',kind:'up',rar:1,name:'盾の壁',desc:'正面から飛んできた敵の弾を防ぐ'},
   {id:'k_long',cls:'knight',kind:'up',rar:1,name:'不動の構え',desc:'挑発の盾が2秒長く続く'},
-  {id:'k_spike',cls:'knight',kind:'up',rar:1,name:'棘付きの盾',desc:'挑発中、触れた敵に15ダメージ'},
+  {id:'k_spike',cls:'knight',kind:'up',rar:1,name:'棘付きの盾',desc:'挑発中、触れた敵に30ダメージ'},
   {id:'k_bash',cls:'knight',kind:'up',rar:2,name:'重い盾',desc:'盾殴りで敵が0.6秒ふらつく'},
   {id:'k_cover',cls:'knight',kind:'up',rar:1,coop:1,name:'かばう',desc:'挑発中、近くの仲間の受けるダメージ −30%'},
   {id:'k_charge',cls:'knight',kind:'up',rar:2,name:'突撃',desc:'挑発の盾と同時に前へ突進し、敵を吹き飛ばす'},
@@ -419,7 +422,7 @@ const CATALOG=[
   {id:'r_coin',kind:'relic',rar:1,name:'幸運の金貨',desc:'レアや伝説の候補が出やすくなる'},
   {id:'r_mask',kind:'relic',rar:2,name:'怒りの仮面',desc:'HPが減るほど攻撃力アップ（最大+50%）'},
   {id:'r_feather',kind:'relic',rar:1,name:'守りの羽',desc:'各部屋で最初の1回の攻撃を防ぐ'},
-  {id:'r_orb',kind:'relic',rar:3,name:'爆裂の宝珠',desc:'倒した敵が爆発し、周りに20ダメージ'},
+  {id:'r_orb',kind:'relic',rar:3,name:'爆裂の宝珠',desc:'倒した敵が爆発し、周りに35ダメージ'},
   {id:'r_gear',kind:'relic',rar:1,name:'時の歯車',desc:'スキルを使うと2秒間 移動速度 +30%'},
   {id:'r_eye',kind:'relic',rar:1,name:'鷹の目',desc:'攻撃の届く距離 +20%'},
   // 道具（1種類だけ持てる。取り直すと入れ替え）
@@ -427,7 +430,7 @@ const CATALOG=[
   {id:'i_bomb',kind:'item',rar:1,n:3,name:'爆弾',desc:'前方に投げて爆発、周りに40ダメージ（3回）'},
   {id:'i_smoke',kind:'item',rar:1,n:2,name:'煙玉',desc:'3秒間 敵から狙われなくなる（2回）'},
   {id:'i_bell',kind:'item',rar:1,n:2,coop:1,name:'祝福の鐘',desc:'近くの仲間全員のHPを30回復（2回）'},
-  {id:'i_glass',kind:'item',rar:1,n:2,name:'時の砂時計',desc:'スキルの待ち時間をすぐ回復（2回）'},
+  {id:'i_glass',kind:'item',rar:1,n:3,name:'時の砂時計',desc:'スキルの待ち時間をすぐ回復（3回）'},
   {id:'i_scroll',kind:'item',rar:2,n:1,name:'雷鳴の巻物',desc:'周りの敵すべてに25ダメージ（1回）'},
 ];
 const CAT={};for(const c of CATALOG)CAT[c.id]=c;
@@ -436,7 +439,7 @@ const KIND_NAME={up:'強化',relic:'遺物',item:'道具'},RAR_NAME=['','','レ�
 // ================= シミュレーション（ホストが計算する部分） =================
 // ここは描画・入力から切り離してあり、通信版ではホストだけがこれを動かして結果を配る
 function createSim(){
-  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,fountain:null,hazards:[],pets:[],blasts:[],bossDead:false,rtype:'battle',rname:'',lay:0,doors:[],waves:[],treasureN:0,kills:0,eid:1,startT:0,endT:0,ev:[]};
+  return{t:0,phase:'lobby',room:0,players:{},enemies:[],shots:[],zones:[],spawns:[],doorOpen:false,cleared:false,chest:null,fountain:null,hazards:[],pickups:[],pickT:0,pets:[],blasts:[],bossDead:false,rtype:'battle',rname:'',lay:0,doors:[],waves:[],treasureN:0,kills:0,eid:1,startT:0,endT:0,ev:[]};
 }
 function addPlayer(S,id,cls){
   const c=CLASSES[cls];
@@ -453,7 +456,7 @@ function startRun(S){
 function setupRoom(S,i,type){
   S.room=i;S.rtype=type;S.rname=RTYPE[type].name;
   S.lay=type==='midboss'?0:type==='boss'?8:type==='treasure'?4:type==='fountain'?[0,1,3,4,6][Math.floor(Math.random()*5)]:Math.floor(Math.random()*8);
-  S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.hazards=[];S.blasts=[];S.pets=(S.pets||[]).filter(q=>q.perm);S.bossDead=false;S.doorOpen=false;S.cleared=false;
+  S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.hazards=[];S.blasts=[];S.pickups=[];S.pickT=7;S.pets=(S.pets||[]).filter(q=>q.perm);S.bossDead=false;S.doorOpen=false;S.cleared=false;
   S.chest=type==='treasure'?{x:W/2,y:H/2,open:false}:null;
   S.fountain=type==='fountain'?{x:W/2,y:H/2,used:{}}:null;
   if(type==='treasure')S.treasureN++;
@@ -464,16 +467,16 @@ function setupRoom(S,i,type){
     p.shield=has(p,'r_feather')?1:0;
     if(p.down){p.down=false;p.hp=Math.round(p.max*.35);p.rev=0}});
   for(const q of S.pets){const o=S.players[q.owner];if(o){q.x=o.x+20;q.y=o.y+30}}
-  S.waves=type==='battle'||type==='elite'?genWaves(i,type==='elite'):type==='midboss'?[['chief']]:type==='boss'?[['king']]:[];
+  S.waves=type==='battle'||type==='elite'?genWaves(i,type==='elite',ps.length):type==='midboss'?[['chief']]:type==='boss'?[['king']]:[];
   S.elite=type==='elite';
   if(S.waves.length)spawnWave(S,true);
   S.ev.push({k:'room',room:i,type,name:S.rname});
 }
 function spawnWave(S,first){
   const list=S.waves.shift(),n=nPlayers(S);
-  const hpScale=(1+.1*S.room)*(1+.35*(n-1))*(S.elite?1.5:1);
+  const hpScale=(1+.1*S.room)*(1+.2*(n-1))*(S.elite?1.5:1);
   list.forEach((type,j)=>{
-    if(ENEMY[type].boss){S.spawns.push({type,x:W-260,y:H/2,t:1.6,hpScale:1+.6*(n-1)});return}
+    if(ENEMY[type].boss){S.spawns.push({type,x:W-260,y:H/2,t:1.6,hpScale:n===1&&type==='king'?.9:pk('boss',n)});return}
     const pos=spawnPos(S);S.spawns.push({type,x:pos[0],y:pos[1],t:(first?1.1:.4)+j*.35,hpScale,elite:S.elite});
   });
   if(!first)S.ev.push({k:'wave'});
@@ -504,7 +507,7 @@ function alliesNear(S,p,r){return alivePlayers(S).filter(q=>q!==p&&Math.hypot(q.
 
 // ---------- 強化の効果を数値にする ----------
 function atkMul(S,p){
-  let m=1+.15*has(p,'pow');
+  let m=(1+.15*has(p,'pow'))*(1+.08*has(p,'heavy'));
   if(has(p,'r_mask'))m*=1+.5*(1-p.hp/p.max);
   if(has(p,'r_bond'))m*=1+.08*alliesNear(S,p,170).length;
   for(const q of alliesNear(S,p,160))if(has(q,'c_insp'))m*=1+.1;
@@ -516,7 +519,7 @@ const reach=p=>1+.2*has(p,'r_eye');
 const knockMul=p=>1+.4*has(p,'heavy');
 // 吟遊詩人の歌の範囲にいるか（歌っている詩人を返す）
 function songOn(S,p){for(const q of alivePlayers(S))if(q.songT>0&&Math.hypot(q.x-p.x,q.y-p.y)<q.songR)return q;return null}
-function speedOf(p,S){let v=CLASSES[p.cls].speed*(1+.1*Math.min(has(p,'wind'),4))*(p.haste>0?1.3:1);
+function speedOf(p,S){let v=CLASSES[p.cls].speed*(1+.15*Math.min(has(p,'wind'),4))*(p.haste>0?1.3:1);
   if(S&&alivePlayers(S).some(q=>q.cls==='bard'&&Math.hypot(q.x-p.x,q.y-p.y)<180))v*=1.1;return v}
 function atkCdOf(p,moving,S){return CLASSES[p.cls].atkCd*Math.pow(.88,has(p,'rapid'))*(has(p,'r_boots')&&moving?.8:1)*(S&&songOn(S,p)?.8:1)}
 function skillCdOf(p){return CLASSES[p.cls].skillCd*Math.pow(.85,has(p,'focus'))*(has(p,'s_spin')?.7:1)*(has(p,'m_fast')?.8:1)*(has(p,'t_fast')?.65:1)}
@@ -546,9 +549,27 @@ function strike(S,p,e,base,kx,ky,knock,color,opt={}){
   if(!e.boss&&Math.random()<.15*has(p,'r_ice'))e.frozen=1;
   if(e.hp<=0){
     if(has(p,'r_fang'))heal(S,p,4);
-    if(has(p,'r_orb')){S.ev.push({k:'boom',x:e.x,y:e.y,r:80});for(const o of S.enemies)if(o!==e&&o.hp>0&&Math.hypot(o.x-e.x,o.y-e.y)<80+o.r){const d=Math.hypot(o.x-e.x,o.y-e.y)||1;strike(S,p,o,20,(o.x-e.x)/d,(o.y-e.y)/d,300,'#ffb060',{noProc:true})}}
+    if(has(p,'r_orb')){S.ev.push({k:'boom',x:e.x,y:e.y,r:110});for(const o of S.enemies)if(o!==e&&o.hp>0&&Math.hypot(o.x-e.x,o.y-e.y)<110+o.r){const d=Math.hypot(o.x-e.x,o.y-e.y)||1;strike(S,p,o,35,(o.x-e.x)/d,(o.y-e.y)/d,300,'#ffb060',{noProc:true})}}
   }
   return ok;
+}
+// ---------- 回復の実（敵が落とす／ボス戦で湧く。拾った人が最大HPの15%回復） ----------
+const PICK_LIFE=10,PICK_HEAL=.15;
+// 回復役（僧侶）がいないパーティは回復の実が出やすい
+const noHealer=S=>!Object.values(S.players).some(p=>p.cls==='priest');
+function dropPickup(S,x,y){
+  x=clamp(x,WALL+24,W-WALL-24);y=clamp(y,WALL+24,H-WALL-24);
+  for(let k=0;k<12&&inWall(S,x,y);k++){x+=(Math.random()-.5)*60;y+=(Math.random()-.5)*60}
+  if(inWall(S,x,y))return;
+  S.pickups.push({id:S.eid++,x,y,t:PICK_LIFE});S.ev.push({k:'pdrop',x,y});
+}
+function stepPickups(S,dt){
+  if(S.enemies.some(e=>e.boss&&e.hp>0)){S.pickT-=dt;
+    if(S.pickT<=0){S.pickT=noHealer(S)?9:12;for(let k=0;k<20;k++){const x=WALL+80+Math.random()*(W-2*WALL-160),y=WALL+80+Math.random()*(H-2*WALL-160);
+      if(!inWall(S,x,y)&&!S.enemies.some(e=>Math.hypot(e.x-x,e.y-y)<e.r+60)){dropPickup(S,x,y);break}}}}
+  for(const q of S.pickups){q.t-=dt;if(q.t<=0)continue;
+    for(const p of alivePlayers(S))if(Math.hypot(p.x-q.x,p.y-q.y)<p.r+14&&!p.offer){heal(S,p,p.max*PICK_HEAL,false);S.ev.push({k:'pick',x:q.x,y:q.y,id:p.id});q.t=0;break}}
+  S.pickups=S.pickups.filter(q=>q.t>0);
 }
 function damageEnemy(S,e,dmg,kx,ky,knock,by,color,crit=false){
   if(e.hp<=0)return false;
@@ -556,7 +577,7 @@ function damageEnemy(S,e,dmg,kx,ky,knock,by,color,crit=false){
   e.hp-=dmg;e.flash=.1;e.freeze=e.boss?.02:.06;
   const kb=e.boss?.08:e.type==='slime'?1.25:1;e.kx+=kx*knock*kb;e.ky+=ky*knock*kb;
   S.ev.push({k:'hit',x:e.x,y:e.y,kx,ky,dmg,color,by,crit});
-  if(e.hp<=0){S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,by,type:e.type});if(e.boss){S.bossDead=true;S.slowmo=.9;S.ev.push({k:'bossdown',x:e.x,y:e.y,name:e.name})}}
+  if(e.hp<=0){S.kills++;S.ev.push({k:'kill',x:e.x,y:e.y,by,type:e.type});if(!e.boss&&Math.random()<(e.elite?.12:.06)*(noHealer(S)?1.65:1))dropPickup(S,e.x,e.y);if(e.boss){S.bossDead=true;S.slowmo=.9;S.ev.push({k:'bossdown',x:e.x,y:e.y,name:e.name})}}
   return true;
 }
 function hurtPlayer(S,p,dmg,kx,ky,src){
@@ -564,13 +585,13 @@ function hurtPlayer(S,p,dmg,kx,ky,src){
   if(src&&has(p,'r_thorn')&&src.hp>0)damageEnemy(S,src,10,-kx,-ky,200,p.id,'#d9c79e');
   if(p.shield>0){p.shield=0;p.iframe=.6;S.ev.push({k:'block',x:p.x,y:p.y,id:p.id});return}
   if(has(p,'t_evade')&&Math.random()<.2){p.iframe=.3;S.ev.push({k:'miss',x:p.x,y:p.y});return}
-  if(p.guard>0&&src&&has(p,'k_spike')&&src.hp>0)damageEnemy(S,src,15,-kx,-ky,260,p.id,'#d9c79e');
+  if(p.guard>0&&src&&has(p,'k_spike')&&src.hp>0)damageEnemy(S,src,30,-kx,-ky,260,p.id,'#d9c79e');
   let m=Math.max(.4,1-.1*has(p,'tough'));
   if(p.guard>0)m*=.5;
   if(alliesNear(S,p,170).some(q=>q.guard>0&&has(q,'k_cover')))m*=.7;
   if(has(p,'r_iron')&&p.hp<=p.max/2)m*=.5;
   if(alliesNear(S,p,160).some(q=>has(q,'c_guard')))m*=.85;
-  dmg=Math.max(1,Math.round(dmg*m));
+  dmg=Math.max(1,Math.round(dmg*m*pk('dmg',nPlayers(S))));
   p.hp=Math.max(0,p.hp-dmg);p.iframe=.75+.3*has(p,'light');p.ix+=kx*280;p.iy+=ky*280;
   S.ev.push({k:'phit',id:p.id,x:p.x,y:p.y,dmg});
   if(p.hp<=0&&has(p,'bear')&&!p.bearUsed){p.hp=1;p.bearUsed=true;p.iframe=1.2;S.ev.push({k:'bear',id:p.id,x:p.x,y:p.y});return}
@@ -604,7 +625,7 @@ function attack(S,p,moving){
     S.ev.push({k:'arc',id:p.id,ang,arc,r,color:c.color,life:.13});
     const bossAhead=S.enemies.some(e=>e.boss&&Math.hypot(e.x-p.x,e.y-p.y)<e.r+110&&((e.x-p.x)*p.fx+(e.y-p.y)*p.fy)>0);
     const lunge=(has(p,'s_dash')?300:150)*(bossAhead?.3:1);p.ix+=p.fx*lunge;p.iy+=p.fy*lunge;if(has(p,'s_dash'))p.dashT=.12;
-    melee(S,p,r,arc,14,260,'#fff6e0');
+    melee(S,p,r,arc,14*(has(p,'s_dash')?1.3:1),260,'#fff6e0');
     if(has(p,'s_wave'))pShot(S,p,ang,{speed:520,r:12,dmg:8,knock:120,life:.32,kind:'wave',pierce:true});
   }else if(p.cls==='archer'){
     const o={speed:640*(has(p,'a_long')?1.3:1),r:5,dmg:10,knock:140,life:.9*(has(p,'a_long')?1.4:1),kind:'arrow',pierce:!!has(p,'a_pierce'),bounce:has(p,'a_bounce')?1:0,snipe:!!has(p,'a_snipe')};
@@ -797,7 +818,7 @@ function bossWind(e,atk,t){e.state='wind';e.atk=atk;e.timer=t;e.wmax=t}
 function eBullet(S,x,y,ang,spd,dmg=12){S.shots.push({id:S.eid++,owner:'e',x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,r:7,dmg,life:4,kind:'ebolt',bounce:0,dist:0,hits:[]})}
 function addMinion(S,type,x,y){
   x=clamp(x,WALL+30,W-WALL-30);y=clamp(y,WALL+30,H-WALL-30);
-  S.spawns.push({type,x,y,t:.5,hpScale:(1+.1*S.room)*(1+.35*(nPlayers(S)-1))});
+  S.spawns.push({type,x,y,t:.5,hpScale:(1+.1*S.room)*(1+.2*(nPlayers(S)-1))});
 }
 function hurtArea(S,x,y,r,dmg,knock=1){
   for(const p of alivePlayers(S)){const d=Math.hypot(p.x-x,p.y-y)||1;if(d<r+p.r)hurtPlayer(S,p,dmg,(p.x-x)/d*knock,(p.y-y)/d*knock)}
@@ -823,7 +844,7 @@ function bossAI(S,e,dt,tgt,dist,ux,uy){
     }else if(e.state==='charge'){
       mvx=e.ax*640;mvy=e.ay*640;
       if(e.timer<=0){if(enr&&!e.chain){e.chain=1;bossWind(e,'charge',.4)}else{e.chain=0;e.state='rest';e.timer=.6}}
-    }else if(e.timer<=0){const wasStun=e.state==='stun';e.state='walk';e.cd=wasStun?.6:1+Math.random()*.6}
+    }else if(e.timer<=0){const wasStun=e.state==='stun';e.state='walk';e.cd=wasStun?.6:(1+Math.random()*.6)/pk('tempo',nPlayers(S))}
     return[mvx,mvy];
   }
   // 骸骨王：HPが2/3・1/3を切るたびに段階が上がる
@@ -851,7 +872,7 @@ function bossAI(S,e,dt,tgt,dist,ux,uy){
       if(e.atk==='ring'){e.state='cast';e.burst=ph;e.timer=0;e.rot=Math.random()*Math.PI}
       else if(e.atk==='zones'){
         for(const p of alivePlayers(S))S.hazards.push({x:p.x+p.vx*.3,y:p.y+p.vy*.3,r:72,t:1.1,max:1.1,dmg:20});
-        for(let i=0;i<ph+1;i++)S.hazards.push({x:WALL+80+Math.random()*(W-2*WALL-160),y:WALL+80+Math.random()*(H-2*WALL-160),r:72,t:1.1+i*.15,max:1.1+i*.15,dmg:20});
+        for(let i=0;i<ph+nPlayers(S);i++)S.hazards.push({x:WALL+80+Math.random()*(W-2*WALL-160),y:WALL+80+Math.random()*(H-2*WALL-160),r:72,t:1.1+i*.15,max:1.1+i*.15,dmg:20});
         e.state='rest';e.timer=.5}
       else if(e.atk==='sweep'){
         const ang=Math.atan2(e.ay,e.ax),R=185,arc=Math.PI*.75;
@@ -864,7 +885,7 @@ function bossAI(S,e,dt,tgt,dist,ux,uy){
       else{e.state='spiral';e.timer=2.6;e.rot=0;e.tick=0}
     }
   }else if(e.state==='cast'){
-    if(e.timer<=0){const n=14+3*ph;e.rot+=Math.PI/n;
+    if(e.timer<=0){const n=14+3*ph+3*(nPlayers(S)-1);e.rot+=Math.PI/n;
       for(let i=0;i<n;i++)eBullet(S,e.x,e.y,e.rot+i*Math.PI*2/n,200+20*ph);
       S.ev.push({k:'cast',x:e.x,y:e.y});
       e.burst--;e.timer=.45;if(e.burst<=0){e.state='rest';e.timer=.7}}
@@ -872,7 +893,7 @@ function bossAI(S,e,dt,tgt,dist,ux,uy){
     e.tick-=dt;e.rot+=dt*2.4;
     if(e.tick<=0){e.tick=.09;for(let i=0;i<3;i++)eBullet(S,e.x,e.y,e.rot+i*Math.PI*2/3,210,10)}
     if(e.timer<=0){e.state='rest';e.timer=.8}
-  }else if(e.state==='rest'){if(e.timer<=0){e.state='walk';e.cd=1.7-.3*ph}}
+  }else if(e.state==='rest'){if(e.timer<=0){e.state='walk';e.cd=(1.7-.3*ph)/pk('tempo',nPlayers(S))}}
   return[mvx,mvy];
 }
 
@@ -913,7 +934,7 @@ function stepSim(S,inputs,dt){
       if(s.life<=0){if(s.kind==='fire'&&!s.hits.length)fireBlast(S,s);continue}
       for(const e of S.enemies){if(e.hp<=0||s.hits.includes(e.id))continue;
         if(Math.hypot(e.x-s.x,e.y-s.y)<e.r+s.r){s.hits.push(e.id);
-          const mul=s.snipe?1+Math.min(.5,Math.max(0,(s.dist-150)/400)):1,col=s.kind==='orb'?'#fff3b0':'#e8f5d8';
+          const mul=s.snipe?1+Math.min(.8,Math.max(0,(s.dist-150)/350)):1,col=s.kind==='orb'?'#fff3b0':'#e8f5d8';
           if(p)strike(S,p,e,s.dmg,s.vx/v,s.vy/v,s.knock,col,{mul,slow:s.kind==='fire'&&has(p,'m_ice')});else damageEnemy(S,e,s.dmg,s.vx/v,s.vy/v,s.knock,s.by,col);
           if(s.kind==='fire'&&p){fireBlast(S,s);if(has(p,'m_chain')){let nb=null,bd=170;for(const o of S.enemies){const d=Math.hypot(o.x-e.x,o.y-e.y);if(o!==e&&o.hp>0&&d<bd){bd=d;nb=o}}
             if(nb){S.ev.push({k:'bolt',x:nb.x,y:nb.y});strike(S,p,nb,6,0,0,0,'#cfe3ff',{noProc:true})}}}
@@ -928,12 +949,13 @@ function stepSim(S,inputs,dt){
   for(const z of S.zones){z.life-=dt;z.tick-=dt;
     if(z.tick<=0){z.tick=.5;const p=S.players[z.by];
       for(const e of S.enemies)if(e.hp>0&&Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r){if(p)strike(S,p,e,z.dmg,0,0,0,'#fff3b0',{noProc:true});else damageEnemy(S,e,z.dmg,0,0,0,z.by,'#fff3b0')}
-      for(const q of alivePlayers(S))if(Math.hypot(q.x-z.x,q.y-z.y)<z.r+q.r&&q.hp<q.max)heal(S,q,6,false)}}
+      for(const q of alivePlayers(S))if(Math.hypot(q.x-z.x,q.y-z.y)<z.r+q.r&&q.hp<q.max)heal(S,q,4,false)}}
   S.zones=S.zones.filter(z=>z.life>0);
   // 魔法使いの隕石・盗賊の残影
   for(const b of S.blasts){b.t-=dt;if(b.t<=0){const p=S.players[b.by];S.ev.push({k:'boom',x:b.x,y:b.y,r:b.r,meteor:b.kind==='meteor'});
     if(p)for(const e of S.enemies){const d=Math.hypot(e.x-b.x,e.y-b.y)||1;if(e.hp>0&&d<b.r+e.r)strike(S,p,e,b.dmg,(e.x-b.x)/d,(e.y-b.y)/d,380,'#ffb060',{noProc:b.kind!=='meteor'})}}}
   S.blasts=S.blasts.filter(b=>b.t>0);
+  stepPickups(S,dt);
   // 召喚士の使い魔：いつも連れている分を補充し、近くの敵を自動で攻撃する
   for(const p of Object.values(S.players))if(p.cls==='summoner'){const want=1+has(p,'u_more'),have=S.pets.filter(q=>q.owner===p.id&&q.perm).length;
     for(let i=have;i<want;i++)S.pets.push({id:S.eid++,owner:p.id,x:p.x,y:p.y+24,t:-1,atkCd:.5,perm:true})}
@@ -1142,12 +1164,12 @@ function buildClientView(){
   const B=snapB,A=snapA&&snapA.room===B.room?snapA:null;
   const al=A?clamp((performance.now()-tB)/Math.max(16,tB-tA),0,1):1;
   const players={};for(const p of lerpList(A&&A.players,B.players,al))players[p.id]=p;
-  S={t:B.t,phase:B.phase,room:B.room,pets:lerpList(A&&A.pets,B.pets||[],al),blasts:B.blasts||[],rtype:B.rtype,rname:B.rname,lay:B.lay,doors:B.doors||[],fountain:B.fountain,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,hazards:B.hazards||[],kills:B.kills,startT:B.startT,endT:B.endT,
+  S={t:B.t,phase:B.phase,room:B.room,pickups:B.pickups||[],pets:lerpList(A&&A.pets,B.pets||[],al),blasts:B.blasts||[],rtype:B.rtype,rname:B.rname,lay:B.lay,doors:B.doors||[],fountain:B.fountain,doorOpen:B.doorOpen,cleared:B.cleared,chest:B.chest,hazards:B.hazards||[],kills:B.kills,startT:B.startT,endT:B.endT,
     players,enemies:lerpList(A&&A.enemies,B.enemies,al),shots:lerpList(A&&A.shots,B.shots,al),zones:B.zones,spawns:B.spawns,ev:[]};
 }
 const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
 function packState(S){
-  return{t:r1(S.t),phase:S.phase,room:S.room,pets:S.pets.map(q=>({id:q.id,owner:q.owner,x:r1(q.x),y:r1(q.y),perm:q.perm})),blasts:S.blasts.map(b=>({x:r1(b.x),y:r1(b.y),r:b.r,t:r2(b.t),max:b.max,kind:b.kind})),rtype:S.rtype,rname:S.rname,lay:S.lay,doors:S.doors,fountain:S.fountain,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,hazards:S.hazards.map(h=>({x:r1(h.x),y:r1(h.y),r:h.r,t:r2(h.t),max:h.max})),kills:S.kills,startT:S.startT,endT:S.endT,
+  return{t:r1(S.t),phase:S.phase,room:S.room,pickups:S.pickups.map(q=>({id:q.id,x:r1(q.x),y:r1(q.y),t:r2(q.t)})),pets:S.pets.map(q=>({id:q.id,owner:q.owner,x:r1(q.x),y:r1(q.y),perm:q.perm})),blasts:S.blasts.map(b=>({x:r1(b.x),y:r1(b.y),r:b.r,t:r2(b.t),max:b.max,kind:b.kind})),rtype:S.rtype,rname:S.rname,lay:S.lay,doors:S.doors,fountain:S.fountain,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,hazards:S.hazards.map(h=>({x:r1(h.x),y:r1(h.y),r:h.r,t:r2(h.t),max:h.max})),kills:S.kills,startT:S.startT,endT:S.endT,
     players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r,ups:p.ups,item:p.item,offer:p.offer,smoke:r2(p.smoke),shield:p.shield,haste:r2(p.haste),guard:r2(p.guard),songT:r2(p.songT),songR:p.songR,dashT:r2(p.dashT)})),
     enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0,stun:e.stunT>0?1:0,sleep:e.sleep?1:0,slow:e.slow>0?1:0,boss:e.boss,elite:e.elite,name:e.name,phase:e.phase,atk:e.atk,wmax:e.wmax,inv:r2(e.inv)})),
     shots:S.shots.map(s=>({id:s.id,x:r1(s.x),y:r1(s.y),vx:r1(s.vx),vy:r1(s.vy),kind:s.kind,owner:s.owner,r:s.r})),
@@ -1157,7 +1179,7 @@ function packState(S){
 
 // ---------- ドット絵 ----------
 // 設計図は tools/sprites.py で作成。1マス=ゲーム内の2ドット相当で描く
-const SPR_SRC={"p_sword":{"pal":{"H":"#5a3a22","s":"#f0c9a0","e":"#1a140f","a":"#d4553d","b":"#c4472f","d":"#6e2518","l":"#3b2a1c","w":"#dfe6ee","g":"#d9a441","o":"#140f0b"},"frames":[["................","................","....ooooooo..o..","...oHHHHHHHoowo.","...oaaaaaaaoowo.","...oHHsssssoowo.","...oHHsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbswo.","...odddddddsgggo","....obbbbbboodo.","....ollollo..o..","....ollollo.....",".....oo.oo......"],["................","................","....ooooooo..o..","...oHHHHHHHoowo.","...oaaaaaaaoowo.","...oHHsssssoowo.","...oHHsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbswo.","...odddddddsgggo","....obbbbbboodo.","...ollooollo.o..","...ollo.ollo....","....oo...oo....."]]},"p_archer":{"pal":{"H":"#2c5a2a","s":"#f0c9a0","e":"#1a140f","b":"#4f9a4c","d":"#25501f","l":"#4a3420","w":"#8a5a2b","g":"#e8e0cc","o":"#140f0b"},"frames":[["................","...oooooooo.....","..obbbbbbbbo....","..obbbbbbbbbo...","..obbbbbbbbboo..","..obbbsssssoowo.","..obbbsseseogowo","..obbssssssogowo","..obbssssssogowo","...odbbbbbbbgowo","...odbbbbbbbgowo","...odddddddsgowo","....obbbbbboowo.","....ollollo..o..","....ollollo.....",".....oo.oo......"],["................","...oooooooo.....","..obbbbbbbbo....","..obbbbbbbbbo...","..obbbbbbbbboo..","..obbbsssssoowo.","..obbbsseseogowo","..obbssssssogowo","..obbssssssogowo","...odbbbbbbbgowo","...odbbbbbbbgowo","...odddddddsgowo","....obbbbbboowo.","...ollooollo.o..","...ollo.ollo....","....oo...oo....."]]},"p_priest":{"pal":{"s":"#f0c9a0","e":"#1a140f","a":"#d9b23f","b":"#efe9da","d":"#b9ad8f","l":"#8a7d63","w":"#9a7b4f","g":"#ffe58a","o":"#140f0b"},"frames":[["............ogo.","...ooooooooogggo","..obbbbbbbbogggo","..obaaaaaaaoowo.","..obbbbbbbboowo.","..obbbsssssoowo.","..obbbsseseoowo.","..obbssssssoowo.","..obbssssssoowo.","...odbbaabbbowo.","...odbbaabbbowo.","...odddaaddsowo.","....obbaabboowo.","....obbbbbboowo.","....olloolloowo.",".....oo..oo..o.."],["............ogo.","...ooooooooogggo","..obbbbbbbbogggo","..obaaaaaaaoowo.","..obbbbbbbboowo.","..obbbsssssoowo.","..obbbsseseoowo.","..obbssssssoowo.","..obbssssssoowo.","...odbbaabbbowo.","...odbbaabbbowo.","...odddaaddsowo.","....obbaabboowo.","....obbbbbboowo.","...olloooollowo.","....oo....oo.o.."]]},"p_knight":{"pal":{"H":"#9fb2cc","s":"#f0c9a0","e":"#1b2333","a":"#c9483a","b":"#7f9bc4","d":"#3d5170","l":"#2d3e5c","w":"#5c78a3","g":"#d9a441","o":"#140f0b"},"frames":[["......oaaao.....","....oooaaao.....","...odddddddo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHeeeeeo....","...oHHHHHHHoooo.","...oHHHHHHHddddo","...odbbbbbbwggwo","...odbbbbbbwggwo","...odddddddwggwo","....obbbbbbwggwo","....ollollowwwwo","....ollollooooo.",".....oo.oo......"],["......oaaao.....","....oooaaao.....","...odddddddo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHeeeeeo....","...oHHHHHHHoooo.","...oHHHHHHHddddo","...odbbbbbbwggwo","...odbbbbbbwggwo","...odddddddwggwo","....obbbbbbwggwo","...ollooollwwwwo","...ollo.olloooo.","....oo...oo....."]]},"p_mage":{"pal":{"H":"#3d2a6e","s":"#f0c9a0","e":"#1a140f","a":"#ff9a3c","b":"#d9733a","d":"#5a3a22","l":"#4a2a12","w":"#7a5230","g":"#ffe58a","o":"#140f0b"},"frames":[[".....oHHHHHoogo.","....ooHHHHoHaaao","...oHHHgHHHoaaao","..ooHHHHHHHoaaao",".oHHHHHHHHHHHwo.","..ooddsssssoowo.","...oddsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbowo.","...odddddddsowo.","....obbbbbboowo.","....obbbbbboowo.","....olloolloowo.",".....oo..oo..o.."],[".....oHHHHHoogo.","....ooHHHHoHaaao","...oHHHgHHHoaaao","..ooHHHHHHHoaaao",".oHHHHHHHHHHHwo.","..ooddsssssoowo.","...oddsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbowo.","...odddddddsowo.","....obbbbbboowo.","....obbbbbboowo.","...olloooollowo.","....oo....oo.o.."]]},"p_thief":{"pal":{"H":"#55595f","s":"#f0c9a0","e":"#1a140f","b":"#6e737b","d":"#2b2e33","l":"#2b2e33","w":"#e3e8ef","g":"#a0763f","o":"#140f0b"},"frames":[["................","...oooooooo.....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHsdddddo....","..oHHsdddddo...o","...odbbbbbbbooow","...odbbbbbbbwwwo","...odddddddsgoo.","....obbbbbboo...","....ollollo.....","....ollollo.....",".....oo.oo......"],["................","...oooooooo.....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHsdddddo....","..oHHsdddddo...o","...odbbbbbbbooow","...odbbbbbbbwwwo","...odddddddsgoo.","....obbbbbboo...","...ollooollo....","...ollo.ollo....","....oo...oo....."]]},"p_bard":{"pal":{"H":"#2f8a68","h":"#c9853a","s":"#f0c9a0","e":"#1a140f","a":"#d4553d","b":"#5fbf9a","d":"#1f5a44","l":"#4a3420","w":"#b07a3c","g":"#e0c890","o":"#140f0b"},"frames":[["oao.............",".oaooooooooo....",".oaaHHHHHHHHo...","..oHHHHHHHHHo...",".oHHHHHHHHHHHoo.","..oohhsssssooogo","...ohhsseseo.ogo","...ossssssso.ogo","...osssssssooogo","...odbbbbbbwwwgo","...odbbbbbbwdwo.","...odddddddwwwo.","....obbbbbbwwwo.","....ollolloooo..","....ollollo.....",".....oo.oo......"],["oao.............",".oaooooooooo....",".oaaHHHHHHHHo...","..oHHHHHHHHHo...",".oHHHHHHHHHHHoo.","..oohhsssssooogo","...ohhsseseo.ogo","...ossssssso.ogo","...osssssssooogo","...odbbbbbbwwwgo","...odbbbbbbwdwo.","...odddddddwwwo.","....obbbbbbwwwo.","...ollooollooo..","...ollo.ollo....","....oo...oo....."]]},"p_summoner":{"pal":{"H":"#5e3590","s":"#e9c6a6","e":"#1a140f","a":"#2a1a40","b":"#a46ae0","d":"#43205f","l":"#2a1a40","w":"#6a4a2a","g":"#7dffd8","o":"#140f0b"},"frames":[["...oao...oao....","...oaoooooao....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHssssssoooo.","..oHHssssssowwwo","..oHHbbbbbbbwgwo","...odbbbbbbbwgwo","...odddddddswwwo","....obbbbbboooo.","....obbbbbbo....","....olloollo....",".....oo..oo....."],["...oao...oao....","...oaoooooao....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHssssssoooo.","..oHHssssssowwwo","..oHHbbbbbbbwgwo","...odbbbbbbbwgwo","...odddddddswwwo","....obbbbbboooo.","....obbbbbbo....","...olloooollo...","....oo....oo...."]]},"e_slime":{"pal":{"b":"#5fa7ba","d":"#3f7f91","g":"#d6f2f8","e":"#132a30","o":"#140f0b"},"frames":[["................","................","................","................","......oooo......","....oobbbboo....","...obbbbbbbbo...","...obbgbbbbbo...","..obbgbbbbbbbo..","..obbgbbbbbbbo..","..obbbebbebbbo..","..obbbebbebbbo..","..obbbbbbbbbbo..","..oddddddddddo..","..oddddddddddo..","...oooooooooo..."],["................","................","................","................","................","................",".....oooooo.....","...oobgbbbboo...","..obbgbbbbbbbo..",".obbbgbbbbbbbbo.",".obbbbebbebbbbo.",".obbbbebbebbbbo.",".obbbbbbbbbbbbo.",".obddddddddddbo.",".obddddddddddbo.","..oooooooooooo.."]]},"e_goblin":{"pal":{"s":"#7f9138","H":"#4a5620","e":"#f2d24a","b":"#7a5a32","d":"#4a3420","l":"#3a2a18","w":"#c9c2b0","o":"#140f0b"},"frames":[["................","................","....ooooooo.....","..ooHHHHHHHoo...",".ososssssssoso..","..ossssssssso...","...osssseseo....","...ossssssso.o..","...ossssswsoowo.","...odbbbbbbbwo..","...odbbbbbbbwo..","...odddddddswo..","....obbbbbboo...","....ollollo.....","....ollollo.....",".....oo.oo......"],["................","................","....ooooooo.....","..ooHHHHHHHoo...",".ososssssssoso..","..ossssssssso...","...osssseseo....","...ossssssso.o..","...ossssswsoowo.","...odbbbbbbbwo..","...odbbbbbbbwo..","...odddddddswo..","....obbbbbboo...","...ollooollo....","...ollo.ollo....","....oo...oo....."]]},"e_archer":{"pal":{"b":"#e4ddcd","d":"#8c8270","e":"#231f1a","w":"#8a6a3e","g":"#cfc6b2","o":"#140f0b"},"frames":[["................","................","....ooooooo.....","...obbbbbbbo.o..","...obbbbbbboowo.","...obbeebeeogowo","...obbebbebogowo","...obbbbbbbogowo","...obbddddbogowo","....oobbbbbbgowo",".....odbdboogowo",".....obbbbo.owo.",".....odbdbo..o..","....obooobo.....","....obo.obo.....",".....o...o......"],["................","................","....ooooooo.....","...obbbbbbbo.o..","...obbbbbbboowo.","...obbeebeeogowo","...obbebbebogowo","...obbbbbbbogowo","...obbddddbogowo","....oobbbbbbgowo",".....odbdboogowo",".....obbbbo.owo.","....oodbdbo..o..","...obooooobo....","...obo...obo....","....o.....o....."]]},"e_bat":{"pal":{"b":"#4b3b5e","d":"#6b5582","e":"#ff6a5a","o":"#140f0b"},"frames":[[".o............o.","odoooo....oooodo",".oddddo..oddddo.",".oddddboobddddo.",".oddddbbbbddddo.","..odoobeeboodo..","...o.obbbbo.o...",".....obbbbo.....",".....obbbbo.....","......oooo......","................","................"],["................","................","......o..o......",".....oboobo.....","...o.obbbbo.o...","..odoobeeboodo..",".oddddbbbbddddo.",".oddddbbbbddddo.",".oddddbbbbddddo.","odoooooooooooodo",".o............o.","................"]]},"e_shroom":{"pal":{"b":"#b8352a","g":"#f2e6d0","w":"#d9cdb4","e":"#3a2a1c","o":"#140f0b"},"frames":[["................","......oooo......","....oobbbboo....","...obbbbbbbbo...","..oobbbbbggboo..",".obbbbbbbbbbbbo.",".obbggbgbbbbbbo.",".obbbbbbbbbggbo.",".obbbbbbbbbbbbo.","..oooowwwwoooo..",".....owwwwo.....",".....oweewo.....",".....owwwwo.....",".....owwwwo.....",".....owwwwo.....","......oooo......"],["................","......oooo......","....oobbbboo....","...obbbbbbbbo...","..oobbbbbggboo..",".obbbbbbbbbbbbo.",".obbggbgbbbbbbo.",".obbbbbbbbbggbo.",".obbbbbbbbbbbbo.","..oooowwwwoooo..",".....owwwwo.....",".....oweewo.....",".....owwwwo.....","....owwwwwwo....","....owwwwwwo....",".....oooooo....."]]},"e_chief":{"pal":{"s":"#6d7f2e","H":"#5a4a3a","w":"#e9e1cf","e":"#ff5a3c","b":"#7a5a32","d":"#3a2a18","c":"#6b4a2a","l":"#3a2a18","o":"#140f0b"},"frames":[["....owo.........owoowoo.",".....owooooooooowoocccco","...o.oHHHHHHHHHHHoowccco","..osooHHHHHHHHHHHoocccco","...ososssssssssssoscccwo","....osssssssssssssocccco",".....ossseesseesso.occo.",".....ossssssssssso.occo.",".....ossssssssssso.occo.",".....ossssddddssso.occo.","...ooosssswsswsssooocco.","..ossbbbbbbbbbbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbbbbbbbbbbssoo..","..ossdddddddddddddoo....","...oobbbbbbbbbbbbbo.....","....obbbbbbbbbbbbbo.....",".....oolllooollloo......","......olllo.olllo.......","......olllo.olllo.......","......olllo.olllo.......",".......ooo...ooo........"],["....owo.........owoowoo.",".....owooooooooowoocccco","...o.oHHHHHHHHHHHoowccco","..osooHHHHHHHHHHHoocccco","...ososssssssssssoscccwo","....osssssssssssssocccco",".....ossseesseesso.occo.",".....ossssssssssso.occo.",".....ossssssssssso.occo.",".....ossssddddssso.occo.","...ooosssswsswsssooocco.","..ossbbbbbbbbbbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbbbbbbbbbbssoo..","..ossdddddddddddddoo....","...oobbbbbbbbbbbbbo.....","....obbbbbbbbbbbbbo.....",".....olllooooolllo......",".....olllo...olllo......",".....olllo...olllo......",".....olllo...olllo......","......ooo.....ooo......."]]},"e_king":{"pal":{"b":"#e4ddcd","d":"#8c8270","e":"#1b1620","a":"#c7a2ff","c":"#3a2552","g":"#d9a441","w":"#6a5a48","o":"#140f0b"},"frames":[[".....ogoogoggogoogo.....",".....ogggggaagggggo.....",".....oggggggggggggoooo..",".....obbbbbbbbbbbbogggo.",".....obbbbbbbbbbbbogago.",".....obbbbbbbbbbbbogggo.",".....obbeeebbeeebboowo..",".....obbeaebbeaebboowo..",".....obbeeebbeeebboowo..",".....obbbbbbbbbbbboowo..",".....obbbddddddbbboowo..","...ooobbbbdbdbbbbboowo..","..occcccbbbbbbbbccccwo..","..ocddddbbbbbbbbddddwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..",".occccccbbbbbbbbccccwco.",".occccccbbbbbbbbccccwco.",".occccccccccccccccccwco.",".occccccccccccccccccwco.",".occcccccccccccccccccco.","..oooooooooooooooooooo.."],[".....ogoogoggogoogo.....",".....ogggggaagggggo.....",".....oggggggggggggoooo..",".....obbbbbbbbbbbbogggo.",".....obbbbbbbbbbbbogago.",".....obbbbbbbbbbbbogggo.",".....obbeeebbeeebboowo..",".....obbeeebbeeebboowo..",".....obbeeebbeeebboowo..",".....obbbbbbbbbbbboowo..",".....obbbddddddbbboowo..","...ooobbbbdbdbbbbboowo..","..occcccbbbbbbbbccccwo..","..ocddddbbbbbbbbddddwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..",".occccccbbbbbbbbccccwco.",".occccccbbbbbbbbccccwco.",".occccccccccccccccccwco.",".occccccccccccccccccwco.",".occcccccccccccccccccco.","..oooooooooooooooooooo.."]]},"pet":{"pal":{"b":"#c9a6f2","e":"#43205f","g":"#ffffff","o":"#140f0b"},"frames":[["....oo....","...obbo...","..obbbbo..",".obgbbbbo.",".obbebebo.",".obbbbbbo.",".obbbbbbo.","..obbbbo..","...obbo...","....oo...."]]},"chest":{"pal":{"b":"#7d5230","d":"#5a3a1e","g":"#d9a441","e":"#1a0f06","o":"#140f0b"},"frames":[["................",".oooooooooooooo.","oddddddddddddddo","oddddddddddddddo","oddddddggddddddo","oddddddggddddddo","obbbbbbggbbbbbbo","obbbbbbggbbbbbbo","obbbbbbggbbbbbbo","oggggggggggggggo","obbbbbbggbbbbbbo","obbbbbbbbbbbbbbo","obbbbbbbbbbbbbbo"],["................","................",".oooooooooooooo.","oddddddddddddddo","oddddddddddddddo",".oeeeeeeeeeeeeo.","obbbbbbbbbbbbbbo","obbbbbbggbbbbbbo","obbbbbbggbbbbbbo","oggggggggggggggo","obbbbbbggbbbbbbo","obbbbbbbbbbbbbbo","obbbbbbbbbbbbbbo"]]}};
+const SPR_SRC={"p_sword":{"pal":{"H":"#5a3a22","s":"#f0c9a0","e":"#1a140f","a":"#d4553d","b":"#c4472f","d":"#6e2518","l":"#3b2a1c","w":"#dfe6ee","g":"#d9a441","o":"#140f0b"},"frames":[["................","................","....ooooooo..o..","...oHHHHHHHoowo.","...oaaaaaaaoowo.","...oHHsssssoowo.","...oHHsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbswo.","...odddddddsgggo","....obbbbbboodo.","....ollollo..o..","....ollollo.....",".....oo.oo......"],["................","................","....ooooooo..o..","...oHHHHHHHoowo.","...oaaaaaaaoowo.","...oHHsssssoowo.","...oHHsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbswo.","...odddddddsgggo","....obbbbbboodo.","...ollooollo.o..","...ollo.ollo....","....oo...oo....."]]},"p_archer":{"pal":{"H":"#2c5a2a","s":"#f0c9a0","e":"#1a140f","b":"#4f9a4c","d":"#25501f","l":"#4a3420","w":"#8a5a2b","g":"#e8e0cc","o":"#140f0b"},"frames":[["................","...oooooooo.....","..obbbbbbbbo....","..obbbbbbbbbo...","..obbbbbbbbboo..","..obbbsssssoowo.","..obbbsseseogowo","..obbssssssogowo","..obbssssssogowo","...odbbbbbbbgowo","...odbbbbbbbgowo","...odddddddsgowo","....obbbbbboowo.","....ollollo..o..","....ollollo.....",".....oo.oo......"],["................","...oooooooo.....","..obbbbbbbbo....","..obbbbbbbbbo...","..obbbbbbbbboo..","..obbbsssssoowo.","..obbbsseseogowo","..obbssssssogowo","..obbssssssogowo","...odbbbbbbbgowo","...odbbbbbbbgowo","...odddddddsgowo","....obbbbbboowo.","...ollooollo.o..","...ollo.ollo....","....oo...oo....."]]},"p_priest":{"pal":{"s":"#f0c9a0","e":"#1a140f","a":"#d9b23f","b":"#efe9da","d":"#b9ad8f","l":"#8a7d63","w":"#9a7b4f","g":"#ffe58a","o":"#140f0b"},"frames":[["............ogo.","...ooooooooogggo","..obbbbbbbbogggo","..obaaaaaaaoowo.","..obbbbbbbboowo.","..obbbsssssoowo.","..obbbsseseoowo.","..obbssssssoowo.","..obbssssssoowo.","...odbbaabbbowo.","...odbbaabbbowo.","...odddaaddsowo.","....obbaabboowo.","....obbbbbboowo.","....olloolloowo.",".....oo..oo..o.."],["............ogo.","...ooooooooogggo","..obbbbbbbbogggo","..obaaaaaaaoowo.","..obbbbbbbboowo.","..obbbsssssoowo.","..obbbsseseoowo.","..obbssssssoowo.","..obbssssssoowo.","...odbbaabbbowo.","...odbbaabbbowo.","...odddaaddsowo.","....obbaabboowo.","....obbbbbboowo.","...olloooollowo.","....oo....oo.o.."]]},"p_knight":{"pal":{"H":"#9fb2cc","s":"#f0c9a0","e":"#1b2333","a":"#c9483a","b":"#7f9bc4","d":"#3d5170","l":"#2d3e5c","w":"#5c78a3","g":"#d9a441","o":"#140f0b"},"frames":[["......oaaao.....","....oooaaao.....","...odddddddo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHeeeeeo....","...oHHHHHHHoooo.","...oHHHHHHHddddo","...odbbbbbbwggwo","...odbbbbbbwggwo","...odddddddwggwo","....obbbbbbwggwo","....ollollowwwwo","....ollollooooo.",".....oo.oo......"],["......oaaao.....","....oooaaao.....","...odddddddo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHHHHHHo....","...oHHeeeeeo....","...oHHHHHHHoooo.","...oHHHHHHHddddo","...odbbbbbbwggwo","...odbbbbbbwggwo","...odddddddwggwo","....obbbbbbwggwo","...ollooollwwwwo","...ollo.olloooo.","....oo...oo....."]]},"p_mage":{"pal":{"H":"#3d2a6e","s":"#f0c9a0","e":"#1a140f","a":"#ff9a3c","b":"#d9733a","d":"#5a3a22","l":"#4a2a12","w":"#7a5230","g":"#ffe58a","o":"#140f0b"},"frames":[[".....oHHHHHoogo.","....ooHHHHoHaaao","...oHHHgHHHoaaao","..ooHHHHHHHoaaao",".oHHHHHHHHHHHwo.","..ooddsssssoowo.","...oddsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbowo.","...odddddddsowo.","....obbbbbboowo.","....obbbbbboowo.","....olloolloowo.",".....oo..oo..o.."],[".....oHHHHHoogo.","....ooHHHHoHaaao","...oHHHgHHHoaaao","..ooHHHHHHHoaaao",".oHHHHHHHHHHHwo.","..ooddsssssoowo.","...oddsseseoowo.","...osssssssoowo.","...osssssssoowo.","...odbbbbbbbowo.","...odbbbbbbbowo.","...odddddddsowo.","....obbbbbboowo.","....obbbbbboowo.","...olloooollowo.","....oo....oo.o.."]]},"p_thief":{"pal":{"H":"#55595f","s":"#f0c9a0","e":"#1a140f","b":"#6e737b","d":"#2b2e33","l":"#2b2e33","w":"#e3e8ef","g":"#a0763f","o":"#140f0b"},"frames":[["................","...oooooooo.....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHsdddddo....","..oHHsdddddo...o","...odbbbbbbbooow","...odbbbbbbbwwwo","...odddddddsgoo.","....obbbbbboo...","....ollollo.....","....ollollo.....",".....oo.oo......"],["................","...oooooooo.....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHsdddddo....","..oHHsdddddo...o","...odbbbbbbbooow","...odbbbbbbbwwwo","...odddddddsgoo.","....obbbbbboo...","...ollooollo....","...ollo.ollo....","....oo...oo....."]]},"p_bard":{"pal":{"H":"#2f8a68","h":"#c9853a","s":"#f0c9a0","e":"#1a140f","a":"#d4553d","b":"#5fbf9a","d":"#1f5a44","l":"#4a3420","w":"#b07a3c","g":"#e0c890","o":"#140f0b"},"frames":[["oao.............",".oaooooooooo....",".oaaHHHHHHHHo...","..oHHHHHHHHHo...",".oHHHHHHHHHHHoo.","..oohhsssssooogo","...ohhsseseo.ogo","...ossssssso.ogo","...osssssssooogo","...odbbbbbbwwwgo","...odbbbbbbwdwo.","...odddddddwwwo.","....obbbbbbwwwo.","....ollolloooo..","....ollollo.....",".....oo.oo......"],["oao.............",".oaooooooooo....",".oaaHHHHHHHHo...","..oHHHHHHHHHo...",".oHHHHHHHHHHHoo.","..oohhsssssooogo","...ohhsseseo.ogo","...ossssssso.ogo","...osssssssooogo","...odbbbbbbwwwgo","...odbbbbbbwdwo.","...odddddddwwwo.","....obbbbbbwwwo.","...ollooollooo..","...ollo.ollo....","....oo...oo....."]]},"p_summoner":{"pal":{"H":"#5e3590","s":"#e9c6a6","e":"#1a140f","a":"#2a1a40","b":"#a46ae0","d":"#43205f","l":"#2a1a40","w":"#6a4a2a","g":"#7dffd8","o":"#140f0b"},"frames":[["...oao...oao....","...oaoooooao....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHssssssoooo.","..oHHssssssowwwo","..oHHbbbbbbbwgwo","...odbbbbbbbwgwo","...odddddddswwwo","....obbbbbboooo.","....obbbbbbo....","....olloollo....",".....oo..oo....."],["...oao...oao....","...oaoooooao....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHHHHHHo....","..oHHHssssso....","..oHHHsseseo....","..oHHssssssoooo.","..oHHssssssowwwo","..oHHbbbbbbbwgwo","...odbbbbbbbwgwo","...odddddddswwwo","....obbbbbboooo.","....obbbbbbo....","...olloooollo...","....oo....oo...."]]},"e_slime":{"pal":{"b":"#5fa7ba","d":"#3f7f91","g":"#d6f2f8","e":"#132a30","o":"#140f0b"},"frames":[["................","................","................","................","......oooo......","....oobbbboo....","...obbbbbbbbo...","...obbgbbbbbo...","..obbgbbbbbbbo..","..obbgbbbbbbbo..","..obbbebbebbbo..","..obbbebbebbbo..","..obbbbbbbbbbo..","..oddddddddddo..","..oddddddddddo..","...oooooooooo..."],["................","................","................","................","................","................",".....oooooo.....","...oobgbbbboo...","..obbgbbbbbbbo..",".obbbgbbbbbbbbo.",".obbbbebbebbbbo.",".obbbbebbebbbbo.",".obbbbbbbbbbbbo.",".obddddddddddbo.",".obddddddddddbo.","..oooooooooooo.."]]},"e_goblin":{"pal":{"s":"#7f9138","H":"#4a5620","e":"#f2d24a","b":"#7a5a32","d":"#4a3420","l":"#3a2a18","w":"#c9c2b0","o":"#140f0b"},"frames":[["................","................","....ooooooo.....","..ooHHHHHHHoo...",".ososssssssoso..","..ossssssssso...","...osssseseo....","...ossssssso.o..","...ossssswsoowo.","...odbbbbbbbwo..","...odbbbbbbbwo..","...odddddddswo..","....obbbbbboo...","....ollollo.....","....ollollo.....",".....oo.oo......"],["................","................","....ooooooo.....","..ooHHHHHHHoo...",".ososssssssoso..","..ossssssssso...","...osssseseo....","...ossssssso.o..","...ossssswsoowo.","...odbbbbbbbwo..","...odbbbbbbbwo..","...odddddddswo..","....obbbbbboo...","...ollooollo....","...ollo.ollo....","....oo...oo....."]]},"e_archer":{"pal":{"b":"#e4ddcd","d":"#8c8270","e":"#231f1a","w":"#8a6a3e","g":"#cfc6b2","o":"#140f0b"},"frames":[["................","................","....ooooooo.....","...obbbbbbbo.o..","...obbbbbbboowo.","...obbeebeeogowo","...obbebbebogowo","...obbbbbbbogowo","...obbddddbogowo","....oobbbbbbgowo",".....odbdboogowo",".....obbbbo.owo.",".....odbdbo..o..","....obooobo.....","....obo.obo.....",".....o...o......"],["................","................","....ooooooo.....","...obbbbbbbo.o..","...obbbbbbboowo.","...obbeebeeogowo","...obbebbebogowo","...obbbbbbbogowo","...obbddddbogowo","....oobbbbbbgowo",".....odbdboogowo",".....obbbbo.owo.","....oodbdbo..o..","...obooooobo....","...obo...obo....","....o.....o....."]]},"e_bat":{"pal":{"b":"#4b3b5e","d":"#6b5582","e":"#ff6a5a","o":"#140f0b"},"frames":[[".o............o.","odoooo....oooodo",".oddddo..oddddo.",".oddddboobddddo.",".oddddbbbbddddo.","..odoobeeboodo..","...o.obbbbo.o...",".....obbbbo.....",".....obbbbo.....","......oooo......","................","................"],["................","................","......o..o......",".....oboobo.....","...o.obbbbo.o...","..odoobeeboodo..",".oddddbbbbddddo.",".oddddbbbbddddo.",".oddddbbbbddddo.","odoooooooooooodo",".o............o.","................"]]},"e_shroom":{"pal":{"b":"#b8352a","g":"#f2e6d0","w":"#d9cdb4","e":"#3a2a1c","o":"#140f0b"},"frames":[["................","......oooo......","....oobbbboo....","...obbbbbbbbo...","..oobbbbbggboo..",".obbbbbbbbbbbbo.",".obbggbgbbbbbbo.",".obbbbbbbbbggbo.",".obbbbbbbbbbbbo.","..oooowwwwoooo..",".....owwwwo.....",".....oweewo.....",".....owwwwo.....",".....owwwwo.....",".....owwwwo.....","......oooo......"],["................","......oooo......","....oobbbboo....","...obbbbbbbbo...","..oobbbbbggboo..",".obbbbbbbbbbbbo.",".obbggbgbbbbbbo.",".obbbbbbbbbggbo.",".obbbbbbbbbbbbo.","..oooowwwwoooo..",".....owwwwo.....",".....oweewo.....",".....owwwwo.....","....owwwwwwo....","....owwwwwwo....",".....oooooo....."]]},"e_chief":{"pal":{"s":"#6d7f2e","H":"#5a4a3a","w":"#e9e1cf","e":"#ff5a3c","b":"#7a5a32","d":"#3a2a18","c":"#6b4a2a","l":"#3a2a18","o":"#140f0b"},"frames":[["....owo.........owoowoo.",".....owooooooooowoocccco","...o.oHHHHHHHHHHHoowccco","..osooHHHHHHHHHHHoocccco","...ososssssssssssoscccwo","....osssssssssssssocccco",".....ossseesseesso.occo.",".....ossssssssssso.occo.",".....ossssssssssso.occo.",".....ossssddddssso.occo.","...ooosssswsswsssooocco.","..ossbbbbbbbbbbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbbbbbbbbbbssoo..","..ossdddddddddddddoo....","...oobbbbbbbbbbbbbo.....","....obbbbbbbbbbbbbo.....",".....oolllooollloo......","......olllo.olllo.......","......olllo.olllo.......","......olllo.olllo.......",".......ooo...ooo........"],["....owo.........owoowoo.",".....owooooooooowoocccco","...o.oHHHHHHHHHHHoowccco","..osooHHHHHHHHHHHoocccco","...ososssssssssssoscccwo","....osssssssssssssocccco",".....ossseesseesso.occo.",".....ossssssssssso.occo.",".....ossssssssssso.occo.",".....ossssddddssso.occo.","...ooosssswsswsssooocco.","..ossbbbbbbbbbbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbcccccbbbbsscco.","..ossbbbbbbbbbbbbbssoo..","..ossdddddddddddddoo....","...oobbbbbbbbbbbbbo.....","....obbbbbbbbbbbbbo.....",".....olllooooolllo......",".....olllo...olllo......",".....olllo...olllo......",".....olllo...olllo......","......ooo.....ooo......."]]},"e_king":{"pal":{"b":"#e4ddcd","d":"#8c8270","e":"#1b1620","a":"#ff2bd6","c":"#3a1426","g":"#d9a441","w":"#6a5a48","o":"#140f0b"},"frames":[[".....ogoogoggogoogo.....",".....ogggggaagggggo.....",".....oggggggggggggoooo..",".....obbbbbbbbbbbbogggo.",".....obbbbbbbbbbbbogago.",".....obbbbbbbbbbbbogggo.",".....obbeeebbeeebboowo..",".....obbeaebbeaebboowo..",".....obbeeebbeeebboowo..",".....obbbbbbbbbbbboowo..",".....obbbddddddbbboowo..","...ooobbbbdbdbbbbboowo..","..occcccbbbbbbbbccccwo..","..ocddddbbbbbbbbddddwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..",".occccccbbbbbbbbccccwco.",".occccccbbbbbbbbccccwco.",".occccccccccccccccccwco.",".occccccccccccccccccwco.",".occcccccccccccccccccco.","..oooooooooooooooooooo.."],[".....ogoogoggogoogo.....",".....ogggggaagggggo.....",".....oggggggggggggoooo..",".....obbbbbbbbbbbbogggo.",".....obbbbbbbbbbbbogago.",".....obbbbbbbbbbbbogggo.",".....obbeeebbeeebboowo..",".....obbeeebbeeebboowo..",".....obbeeebbeeebboowo..",".....obbbbbbbbbbbboowo..",".....obbbddddddbbboowo..","...ooobbbbdbdbbbbboowo..","..occcccbbbbbbbbccccwo..","..ocddddbbbbbbbbddddwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..","..occcccbddbbddbccccwo..","..occcccbbbbbbbbccccwo..",".occccccbbbbbbbbccccwco.",".occccccbbbbbbbbccccwco.",".occccccccccccccccccwco.",".occccccccccccccccccwco.",".occcccccccccccccccccco.","..oooooooooooooooooooo.."]]},"pet":{"pal":{"b":"#c9a6f2","e":"#43205f","g":"#ffffff","o":"#140f0b"},"frames":[["....oo....","...obbo...","..obbbbo..",".obgbbbbo.",".obbebebo.",".obbbbbbo.",".obbbbbbo.","..obbbbo..","...obbo...","....oo...."]]},"chest":{"pal":{"b":"#7d5230","d":"#5a3a1e","g":"#d9a441","e":"#1a0f06","o":"#140f0b"},"frames":[["................",".oooooooooooooo.","oddddddddddddddo","oddddddddddddddo","oddddddggddddddo","oddddddggddddddo","obbbbbbggbbbbbbo","obbbbbbggbbbbbbo","obbbbbbggbbbbbbo","oggggggggggggggo","obbbbbbggbbbbbbo","obbbbbbbbbbbbbbo","obbbbbbbbbbbbbbo"],["................","................",".oooooooooooooo.","oddddddddddddddo","oddddddddddddddo",".oeeeeeeeeeeeeo.","obbbbbbbbbbbbbbo","obbbbbbggbbbbbbo","obbbbbbggbbbbbbo","oggggggggggggggo","obbbbbbggbbbbbbo","obbbbbbbbbbbbbbo","obbbbbbbbbbbbbbo"]]}};
 const SPR={};
 (function buildSprites(){
   const mk=(rows,pal,mode)=>{const h=rows.length,w=rows[0].length,c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
@@ -1368,6 +1390,7 @@ function eventSound(v){
     case'wave':SFX.play('wave');break;
     case'block':SFX.play('block');break;
     case'chest':case'drink':SFX.play('chime');break;
+    case'pick':if(v.id===MY)SFX.play('heal');SFX.play('use');break;
     case'end':SFX.play(v.win?'win':'lose');break;
     case'song':SFX.play('song');break;
     case'taunt':SFX.play('taunt');break;
@@ -1399,13 +1422,15 @@ function handleEvents(list){
       case'room':if(RTYPE[v.type].hint)banner(`${v.name}<small>${RTYPE[v.type].hint}</small>`,2);break;
       case'wave':banner('敵の増援が来た！',1.4);break;
       case'split':banner('<small>全員で同じ扉に集まろう</small>',1.6);break;
+      case'pdrop':burst(v.x,v.y,'#8fe08a',8,90);break;
+      case'pick':burst(v.x,v.y,'#8fe08a',14,160);if(v.id!==MY&&Object.keys(S.players).length>1)toast(`${slotName(v.id)}が回復の実を拾った`);break;
       case'drink':burst(v.x,v.y,'#8fe08a',16,180);burst(S.fountain?S.fountain.x:v.x,S.fountain?S.fountain.y:v.y,'#9fd8e6',18,200);break;
       case'clear':if(v.type==='fountain')break;if(!v.last)banner(v.type==='treasure'?'宝箱を開けた！<small>遺物を1つ選ぼう</small>':'制圧！<small>報酬を1つ選ぼう</small>',2.2);else banner('最後の部屋を制圧！',2);break;
       case'bossin':banner(`${v.name}が現れた！`,2);shake=Math.max(shake,8);burst(v.x,v.y,'#7a2a3a',30,260);break;
       case'bossdown':flashW=.5;banner(`${v.name}を倒した！`,2.6);shake=Math.max(shake,14);burst(v.x,v.y,'#e2a243',50,380);rings.push({x:v.x,y:v.y,r:200,life:.7,max:.7,color:'rgba(226,162,67,A)'});break;
-      case'phase':banner(v.phase===3?`${v.name}が本気を出した！<small>攻撃がさらに激しくなる</small>`:`${v.name}の様子が変わった！`,2.4);shake=Math.max(shake,12);rings.push({x:v.x,y:v.y,r:220,life:.6,max:.6,color:'rgba(150,90,220,A)'});break;
+      case'phase':banner(v.phase===3?`${v.name}が本気を出した！<small>攻撃がさらに激しくなる</small>`:`${v.name}の様子が変わった！`,2.4);shake=Math.max(shake,12);rings.push({x:v.x,y:v.y,r:220,life:.6,max:.6,color:'rgba(255,43,214,A)'});break;
       case'roar':rings.push({x:v.x,y:v.y,r:120,life:.4,max:.4,color:'rgba(201,72,58,A)'});break;
-      case'cast':rings.push({x:v.x,y:v.y,r:70,life:.3,max:.3,color:'rgba(170,110,240,A)'});break;
+      case'cast':rings.push({x:v.x,y:v.y,r:70,life:.3,max:.3,color:'rgba(255,80,220,A)'});break;
       case'cone':rings.push({type:'cone',x:v.x,y:v.y,ang:v.ang,arc:v.arc,r:v.r,life:.3,max:.3});shake=Math.max(shake,5);break;
       case'stun':num(v.x,v.y-50,'ふらふら','#ffd36a');shake=Math.max(shake,9);break;
       case'immune':if(Math.random()<.2)num(v.x,v.y-10,'無効','#a8997f');break;
@@ -1495,6 +1520,13 @@ function draw(){
   ctx.setTransform(dpr*zoom,0,0,dpr*zoom,(-cx*zoom+sx)*dpr,(-cy*zoom+sy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomBg(S.lay),0,0,W,H);
   drawDoor();
+  for(const q of S.pickups||[]){if(q.t<2.5&&Math.floor(time*10)%2)continue;const bob=Math.sin(time*4+q.id)*2;
+    ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(q.x,q.y+bob,2,q.x,q.y+bob,20);g.addColorStop(0,'rgba(143,224,138,.35)');g.addColorStop(1,'rgba(143,224,138,0)');
+    ctx.fillStyle=g;ctx.fillRect(q.x-20,q.y-20+bob,40,40);ctx.globalCompositeOperation='source-over';
+    const P=[['..gg..','.ggrr.','rrrrrr','rrrwrr','rrrrrr','.rrrr.','..rr..'],{g:'#5fbf5a',r:'#d8463a',w:'#ffd9cf'}];
+    const sz=3,ox=Math.round(q.x-9),oy=Math.round(q.y-11+bob);ctx.fillStyle='#140f0b';
+    P[0].forEach((row,yy)=>{for(let xx=0;xx<6;xx++)if(row[xx]!=='.'){ctx.fillRect(ox+xx*sz-1,oy+yy*sz-1,sz+2,sz+2)}});
+    P[0].forEach((row,yy)=>{for(let xx=0;xx<6;xx++){const ch=row[xx];if(ch!=='.'){ctx.fillStyle=P[1][ch];ctx.fillRect(ox+xx*sz,oy+yy*sz,sz,sz)}}})}
   if(S.fountain){const f=S.fountain,mine=f.used&&f.used[MY];
     ctx.fillStyle='#3b332a';ctx.beginPath();ctx.arc(f.x,f.y,46,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#56493a';ctx.lineWidth=5;ctx.stroke();
     ctx.fillStyle=mine?'#2c4a52':'#3f8fa3';ctx.beginPath();ctx.arc(f.x,f.y,36,0,Math.PI*2);ctx.fill();
@@ -1544,7 +1576,7 @@ function draw(){
       ctx.strokeStyle=`rgba(255,120,100,${.6+.3*k})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,150*k,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(e.x,e.y,150,0,Math.PI*2);ctx.stroke()}
     else if(e.atk==='sweep'){ctx.fillStyle=`rgba(201,72,58,${.15+.25*k})`;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.arc(e.x,e.y,185,ang-Math.PI*.375,ang+Math.PI*.375);ctx.closePath();ctx.fill();
       ctx.strokeStyle=`rgba(255,120,100,${.5+.4*k})`;ctx.lineWidth=2;ctx.stroke()}
-    else{ctx.strokeStyle=`rgba(170,110,240,${.3+.5*k})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+10+18*(1-k),0,Math.PI*2);ctx.stroke()}
+    else{ctx.strokeStyle=`rgba(255,80,220,${.3+.5*k})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+10+18*(1-k),0,Math.PI*2);ctx.stroke()}
   }
   // 敵の攻撃予告（足元に描くので先に）
   for(const e of S.enemies){
@@ -1571,8 +1603,9 @@ function draw(){
     if(s.kind==='note'){ctx.font=`18px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#bff0dc';ctx.strokeStyle='#123b2c';ctx.lineWidth=3;
       const yy=s.y+Math.sin(time*18+s.id)*3;ctx.strokeText('♪',s.x,yy);ctx.fillText('♪',s.x,yy);continue}
     if(s.kind==='mbolt'){ctx.fillStyle='rgba(164,106,224,.35)';ctx.beginPath();ctx.arc(s.x,s.y,s.r*1.8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e6d4ff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();continue}
-    if(s.kind==='ebolt'){ctx.fillStyle='rgba(150,90,220,.35)';ctx.beginPath();ctx.arc(s.x,s.y,s.r*1.9,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#d8c2ff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#6a3fb0';ctx.lineWidth=1.5;ctx.stroke();continue}
+    if(s.kind==='ebolt'){const pu=.8+.2*Math.sin(time*18+s.id);ctx.fillStyle=`rgba(255,43,214,${.35*pu})`;ctx.beginPath();ctx.arc(s.x,s.y,s.r*2,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#ff2bd6';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#1a0418';ctx.lineWidth=2.5;ctx.stroke();
+      ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(s.x,s.y,s.r*.4,0,Math.PI*2);ctx.fill();continue}
     if(s.kind==='wave'){const a=Math.atan2(s.vy,s.vx);ctx.strokeStyle='rgba(255,230,200,.8)';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x-Math.cos(a)*10,s.y-Math.sin(a)*10,16,a-.9,a+.9);ctx.stroke();continue}
     if(s.kind==='orb'){ctx.fillStyle='rgba(255,240,170,.3)';ctx.beginPath();ctx.arc(s.x,s.y,s.r*1.9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff6c9';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill()}
     else{const v=Math.hypot(s.vx,s.vy),ux=s.vx/v,uy=s.vy/v,enemy=s.owner==='e';
@@ -1661,7 +1694,7 @@ function drawEnemyBody(e){
     const fl=e.flash>0,boss=e.boss,sc=e.type==='chief'?3:e.type==='king'?3.2:2.2;
     shadow(e.x,e.y,e.r);
     if(e.elite){ctx.strokeStyle=`rgba(226,162,67,${.55+.25*Math.sin(time*5+e.id)})`;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(e.x,e.y+e.r*.8,e.r*1.25,e.r*.55,0,0,Math.PI*2);ctx.stroke()}
-    if(e.type==='king'&&((e.phase||1)>=3||e.inv>0)){ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(e.x,e.y,e.r*.5,e.x,e.y,e.r*2.2);g.addColorStop(0,'rgba(150,90,220,.35)');g.addColorStop(1,'rgba(150,90,220,0)');
+    if(e.type==='king'&&((e.phase||1)>=3||e.inv>0)){ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(e.x,e.y,e.r*.5,e.x,e.y,e.r*2.2);g.addColorStop(0,'rgba(255,43,214,.35)');g.addColorStop(1,'rgba(255,43,214,0)');
       ctx.fillStyle=g;ctx.fillRect(e.x-e.r*2.2,e.y-e.r*2.2,e.r*4.4,e.r*4.4);ctx.globalCompositeOperation='source-over'}
     if(e.type==='shroom'&&e.state==='fuse'){ctx.fillStyle='rgba(201,72,58,.18)';ctx.beginPath();ctx.arc(e.x,e.y,85,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(255,120,100,.7)';ctx.lineWidth=2;ctx.stroke()}
     const fast=e.type==='bat'?14:e.type==='slime'?4:6,frame=Math.floor(time*fast+e.id)%2;
@@ -1691,11 +1724,11 @@ function drawEnemyBody(e){
     if(stun)for(let i=0;i<3;i++){const t=time*4+i*2.1;ctx.fillStyle='#ffd36a';ctx.fillRect(e.x+Math.cos(t)*22-2,e.y-e.r-12+Math.sin(t)*5,4,4)}
     return}
   if(e.type==='king'){const ph=e.phase||1;
-    if(ph>=3||e.inv>0){ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(e.x,e.y,e.r*.5,e.x,e.y,e.r*2.2);g.addColorStop(0,'rgba(150,90,220,.35)');g.addColorStop(1,'rgba(150,90,220,0)');
+    if(ph>=3||e.inv>0){ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(e.x,e.y,e.r*.5,e.x,e.y,e.r*2.2);g.addColorStop(0,'rgba(255,43,214,.35)');g.addColorStop(1,'rgba(255,43,214,0)');
       ctx.fillStyle=g;ctx.fillRect(e.x-e.r*2.2,e.y-e.r*2.2,e.r*4.4,e.r*4.4);ctx.globalCompositeOperation='source-over'}
     ctx.fillStyle='#2a1f3a';ctx.beginPath();ctx.moveTo(e.x-e.r-8,e.y+e.r);ctx.lineTo(e.x,e.y-e.r*.4);ctx.lineTo(e.x+e.r+8,e.y+e.r);ctx.closePath();ctx.fill();
     ctx.fillStyle=fl?'#ffffff':'#e4ddcd';ctx.strokeStyle='#6d665a';ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y-4,e.r*.82,0,Math.PI*2);ctx.fill();ctx.stroke();
-    if(!fl){const glow=ph>=2?'#c7a2ff':'#ff7a64';ctx.fillStyle='#1b1620';ctx.beginPath();ctx.arc(e.x-10,e.y-8,6,0,Math.PI*2);ctx.arc(e.x+10,e.y-8,6,0,Math.PI*2);ctx.fill();
+    if(!fl){const glow=ph>=2?'#ff2bd6':'#ff7a64';ctx.fillStyle='#1b1620';ctx.beginPath();ctx.arc(e.x-10,e.y-8,6,0,Math.PI*2);ctx.arc(e.x+10,e.y-8,6,0,Math.PI*2);ctx.fill();
       ctx.fillStyle=glow;ctx.fillRect(e.x-12,e.y-10,4,4);ctx.fillRect(e.x+8,e.y-10,4,4);ctx.fillStyle='#1b1620';for(let i=-2;i<=2;i++)ctx.fillRect(e.x+i*5-1,e.y+8,3,6)}
     ctx.fillStyle='#d9a441';ctx.strokeStyle='#7a5718';ctx.lineWidth=2;ctx.beginPath();const cy=e.y-e.r*.82-2;
     ctx.moveTo(e.x-18,cy+4);ctx.lineTo(e.x-18,cy-10);ctx.lineTo(e.x-9,cy-3);ctx.lineTo(e.x,cy-14);ctx.lineTo(e.x+9,cy-3);ctx.lineTo(e.x+18,cy-10);ctx.lineTo(e.x+18,cy+4);ctx.closePath();ctx.fill();ctx.stroke();
