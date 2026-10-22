@@ -267,7 +267,7 @@ Object.assign(CLASSES,{
   mage:{name:'魔法使い',glyph:'魔',color:'#d9733a',dark:'#6a2d10',role:'範囲攻撃',atk:'火球',skill:'隕石',
     text:'当たると小さく爆発する火球を撃つ。スキルは少し先に隕石を落とし、広い範囲に大ダメージ。とても打たれ弱い。',hp:80,speed:205,atkCd:.55,skillCd:5},
   thief:{name:'盗賊',glyph:'盗',color:'#8a8f98',dark:'#33363c',role:'高速・一撃',atk:'短剣',skill:'影走り',
-    text:'素早く短剣で斬る。仲間を狙っている敵を斬ると2倍のダメージ。スキルは無敵で駆け抜け、通り道の敵を斬る。',hp:85,speed:270,atkCd:.2,skillCd:3},
+    text:'素早く短剣で斬る。仲間を狙っている敵や、攻撃の構え・ふらつきで隙のある敵を斬ると2倍のダメージ。スキルは無敵で駆け抜け、通り道の敵を斬る。',hp:100,speed:270,atkCd:.2,skillCd:3},
   bard:{name:'吟遊詩人',glyph:'詩',color:'#5fbf9a',dark:'#1f5a44',role:'支援',atk:'音符',skill:'戦いの歌',
     text:'敵を貫く音符を飛ばす。近くの仲間は少し足が速くなる。スキルの歌で、周りの味方の攻撃力と攻撃速度が上がる。',hp:95,speed:225,atkCd:.4,skillCd:11},
   summoner:{name:'召喚士',glyph:'召',color:'#a46ae0',dark:'#43205f',role:'使い魔',atk:'魔弾',skill:'召喚',
@@ -452,7 +452,7 @@ function startRun(S){
 }
 function setupRoom(S,i,type){
   S.room=i;S.rtype=type;S.rname=RTYPE[type].name;
-  S.lay=type==='midboss'?0:type==='boss'?8:type==='treasure'?4:Math.floor(Math.random()*8);
+  S.lay=type==='midboss'?0:type==='boss'?8:type==='treasure'?4:type==='fountain'?[0,1,3,4,6][Math.floor(Math.random()*5)]:Math.floor(Math.random()*8);
   S.enemies=[];S.shots=[];S.zones=[];S.spawns=[];S.hazards=[];S.blasts=[];S.pets=(S.pets||[]).filter(q=>q.perm);S.bossDead=false;S.doorOpen=false;S.cleared=false;
   S.chest=type==='treasure'?{x:W/2,y:H/2,open:false}:null;
   S.fountain=type==='fountain'?{x:W/2,y:H/2,used:{}}:null;
@@ -587,7 +587,7 @@ function melee(S,p,range,arc,dmg,knock,color){
     const da=Math.abs(((Math.atan2(dy,dx)-ang)+Math.PI*3)%(Math.PI*2)-Math.PI);
     if(arc<Math.PI*2&&da>arc/2&&dist>e.r+p.r)continue;
     let opt={};
-    if(p.cls==='thief'){const t=nearestPlayer(S,e.x,e.y);if(t&&t!==p)opt.mul=2;if(has(p,'t_poison'))opt.poison=1}
+    if(p.cls==='thief'){const t=nearestPlayer(S,e.x,e.y);const opening=['wind','rest','stun','fuse','aim','roar','cast'].includes(e.state)||e.stunT>0||e.frozen>0;if((t&&t!==p)||opening)opt.mul=2;if(has(p,'t_poison'))opt.poison=1}
     if(p.cls==='knight'&&has(p,'k_bash'))opt.stun=.6;
     if(strike(S,p,e,dmg,dist?dx/dist:p.fx,dist?dy/dist:p.fy,knock,color,opt))hits++}
   if(hits){p.freeze=.05;if(has(p,'s_drain'))heal(S,p,Math.min(hits,3))}
@@ -602,7 +602,8 @@ function attack(S,p,moving){
   if(p.cls==='sword'){
     const wide=has(p,'s_wide'),r=66*reach(p)*(wide?1.3:1),arc=Math.PI*.62*(wide?1.2:1);
     S.ev.push({k:'arc',id:p.id,ang,arc,r,color:c.color,life:.13});
-    const lunge=has(p,'s_dash')?300:150;p.ix+=p.fx*lunge;p.iy+=p.fy*lunge;if(has(p,'s_dash'))p.dashT=.12;
+    const bossAhead=S.enemies.some(e=>e.boss&&Math.hypot(e.x-p.x,e.y-p.y)<e.r+110&&((e.x-p.x)*p.fx+(e.y-p.y)*p.fy)>0);
+    const lunge=(has(p,'s_dash')?300:150)*(bossAhead?.3:1);p.ix+=p.fx*lunge;p.iy+=p.fy*lunge;if(has(p,'s_dash'))p.dashT=.12;
     melee(S,p,r,arc,14,260,'#fff6e0');
     if(has(p,'s_wave'))pShot(S,p,ang,{speed:520,r:12,dmg:8,knock:120,life:.32,kind:'wave',pierce:true});
   }else if(p.cls==='archer'){
@@ -614,11 +615,11 @@ function attack(S,p,moving){
     if(has(p,'p_spread'))for(const a of[-.22,0,.22])pShot(S,p,ang+a,o);else pShot(S,p,ang,o);
   }else if(p.cls==='knight'){
     const r=54*reach(p);S.ev.push({k:'arc',id:p.id,ang,arc:Math.PI*.55,r,color:c.color,life:.12});
-    p.ix+=p.fx*90;p.iy+=p.fy*90;melee(S,p,r,Math.PI*.55,12,340,'#e6eefc');
+    p.ix+=p.fx*90;p.iy+=p.fy*90;melee(S,p,r,Math.PI*.55,16,340,'#e6eefc');
   }else if(p.cls==='mage'){
     fireball(S,p,ang);if(has(p,'m_mana'))p.pendShot=.13;
   }else if(p.cls==='thief'){
-    const r=46*reach(p);S.ev.push({k:'arc',id:p.id,ang,arc:Math.PI*.5,r,color:'#d8dde6',life:.08});
+    const r=54*reach(p);S.ev.push({k:'arc',id:p.id,ang,arc:Math.PI*.5,r,color:'#d8dde6',life:.08});
     p.ix+=p.fx*60;p.iy+=p.fy*60;melee(S,p,r,Math.PI*.5,8*(has(p,'t_double')?1.6:1),80,'#f2f4f8');
   }else if(p.cls==='bard'){
     const o={speed:460,r:7,dmg:7,knock:90,life:.8,kind:'note',pierce:true};
@@ -787,7 +788,7 @@ function stepEnemy(S,e,dt){
   if(e.type==='chief'&&e.state==='charge'&&Math.hypot(e.x-ox,e.y-oy)<Math.hypot(mvx,mvy)*dt*.4){
     e.state='stun';e.timer=1.1;e.chain=0;S.ev.push({k:'boom',x:e.x+e.ax*e.r,y:e.y+e.ay*e.r,r:60});S.ev.push({k:'stun',x:e.x,y:e.y})}
   for(const p of alivePlayers(S)){const ddx=p.x-e.x,ddy=p.y-e.y,d=Math.hypot(ddx,ddy)||1;
-    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:e.type==='chief'&&e.state==='charge'?24:T.touch;if(!dmg)continue;
+    if(d<e.r+p.r){const dmg=e.type==='goblin'&&e.state==='lunge'?16:e.type==='chief'&&e.state==='charge'?24:T.boss?6:T.touch;if(!dmg)continue;
       if(e.type==='bat'){e.state='back';e.timer=.6}hurtPlayer(S,p,dmg,ddx/d,ddy/d,e)}}
 }
 
@@ -927,7 +928,7 @@ function stepSim(S,inputs,dt){
   for(const z of S.zones){z.life-=dt;z.tick-=dt;
     if(z.tick<=0){z.tick=.5;const p=S.players[z.by];
       for(const e of S.enemies)if(e.hp>0&&Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r){if(p)strike(S,p,e,z.dmg,0,0,0,'#fff3b0',{noProc:true});else damageEnemy(S,e,z.dmg,0,0,0,z.by,'#fff3b0')}
-      for(const q of alivePlayers(S))if(Math.hypot(q.x-z.x,q.y-z.y)<z.r+q.r&&q.hp<q.max)heal(S,q,8,false)}}
+      for(const q of alivePlayers(S))if(Math.hypot(q.x-z.x,q.y-z.y)<z.r+q.r&&q.hp<q.max)heal(S,q,6,false)}}
   S.zones=S.zones.filter(z=>z.life>0);
   // 魔法使いの隕石・盗賊の残影
   for(const b of S.blasts){b.t-=dt;if(b.t<=0){const p=S.players[b.by];S.ev.push({k:'boom',x:b.x,y:b.y,r:b.r,meteor:b.kind==='meteor'});
@@ -943,7 +944,7 @@ function stepSim(S,inputs,dt){
     if(tg){tx=tg.x;ty=tg.y}else{const a=i*2.1+S.t*.8;tx=o.x+Math.cos(a)*34;ty=o.y+Math.sin(a)*34}
     const dx=tx-q.x,dy=ty-q.y,d=Math.hypot(dx,dy)||1;
     if(!tg||d>tg.r+12){const sp=Math.min(d/dt,tg?280:220);q.x+=dx/d*sp*dt;q.y+=dy/d*sp*dt;q.r=10;wallCollide(S,q)}
-    if(tg&&d<tg.r+16&&q.atkCd<=0){q.atkCd=.6*(has(o,'u_swift')?.7:1);
+    if(tg&&d<tg.r+16&&q.atkCd<=0){q.atkCd=.7*(has(o,'u_swift')?.7:1);
       strike(S,o,tg,7*(has(o,'u_strong')?1.5:1),dx/d,dy/d,120,'#d8c2ff',{noProc:true});S.ev.push({k:'pethit',x:tg.x,y:tg.y});
       if(has(o,'u_heal'))heal(S,o,1,false);if(has(o,'u_fire')&&Math.random()<.3){tg.burn=3;tg.burnBy=o.id}}});
   S.enemies=S.enemies.filter(e=>e.hp>0);
