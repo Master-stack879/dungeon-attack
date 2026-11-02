@@ -83,6 +83,7 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;align-items:center}
 .btn{font:inherit;font-size:16px;color:#1a140f;background:var(--torch);border:0;border-radius:4px;padding:10px 22px;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.quit{margin-left:auto;color:var(--muted)}
 .note{font-size:12px;color:var(--muted);line-height:1.6}
 .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:16px}
 .stats div{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;padding:10px}
@@ -321,9 +322,13 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
       <div class="gotlist" id="rGot"></div>
       <div class="actions" id="rActions">
         <button class="btn" id="again">同じ職業でもう一度</button>
-        <button class="btn ghost" id="back">職業を選び直す</button>
+        <button class="btn ghost" id="back">キャラクターを変えて再挑戦</button>
+        <button class="btn ghost quit" id="disband" hidden>解散する</button>
       </div>
-      <div class="note" id="rWait" hidden>ホストが次の操作を選んでいます</div>
+      <div class="actions" id="rWait" hidden>
+        <span class="note">ホストが「もう一度」「キャラクターを変えて再挑戦」「解散」のどれかを選ぶのを待っています</span>
+        <button class="btn ghost quit" id="quitRoom">この部屋を抜ける</button>
+      </div>
     </div>
   </div>
 
@@ -1523,6 +1528,7 @@ function onClientData(d){
   if(!d||typeof d!=='object')return;
   if(d.t==='welcome'){joinDone();clearInterval(pingTimer);pingTimer=setInterval(()=>{if(mode==='client'&&hostConn)send(hostConn,{t:'ping'});else clearInterval(pingTimer)},2000);mode='client';MY=d.id;roomCode=d.code;members={};status('部屋に入りました。職業を選んでください');
     sendPick();renderLobby()}
+  else if(d.t==='disband'){toTitle('ホストが部屋を解散しました');return}
   else if(d.t==='deny'){joinDone();const w=d.why==='full'?'その部屋は満員です（最大4人）':'その部屋はもう出発しています';resetNet();renderLobby();status(w,true)}
   else if(d.t==='lobby'){members=d.members||{};if(typeof d.asc==='number')ascSel=Math.max(0,Math.min(ASC_MAX,d.asc|0));
     if(members[MY]&&members[MY].cls)myCls=members[MY].cls;
@@ -1714,6 +1720,16 @@ $('#join').addEventListener('click',joinRoom);
 $('#leave').addEventListener('click',()=>{resetNet();renderLobby();status('部屋を出ました')});
 $('#go').addEventListener('click',start);
 $('#again').addEventListener('click',start);
+function toTitle(msg){
+  resetNet();S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
+  $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);renderLobby();if(msg)status(msg)}
+$('#disband').addEventListener('click',()=>{
+  if(mode!=='host')return;const bt=$('#disband');
+  if(!bt.dataset.sure){bt.dataset.sure='1';bt.textContent='本当に解散する？（もう一度押す）';setTimeout(()=>{bt.dataset.sure='';bt.textContent='解散する'},3000);return}
+  bt.dataset.sure='';bt.textContent='解散する';broadcast({t:'disband'});
+  const p=peer;peer=null;setTimeout(()=>{try{p&&p.destroy()}catch(_){}},600);
+  conns={};toTitle('部屋を解散しました')});
+$('#quitRoom').addEventListener('click',()=>{if(mode==='client')toTitle('部屋を抜けました')});
 $('#back').addEventListener('click',()=>{
   S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
   $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);
@@ -1979,8 +1995,9 @@ function showResult(){
   if(ua.length||ascUp)$('#rUnlock').innerHTML=(ascUp?`<b>挑戦レベル${ascUp}が解放されました</b>：${ASC[ascUp].d}`+(ua.length?'<br>':''):'')+(!ua.length?'':`<b>実績を達成しました</b><ul>${ua.map(a=>`<li>${a.name}：${rewardText(a.reward)}</li>`).join('')}</ul>`);
   $('#rGot').innerHTML=me?'手に入れたもの<br><b>'+(ownedText(me).replace('所持：',''))+'</b>':'';
   $('#rActions').hidden=mode==='client';$('#rWait').hidden=mode!=='client';
-  $('#again').textContent=mode==='host'?'全員でもう一度':'同じ職業でもう一度';
-  $('#back').textContent=mode==='host'?'全員で職業を選び直す':'職業を選び直す';
+  $('#again').textContent=mode==='host'?'全員で同じ職業のままもう一度':'同じ職業でもう一度';
+  $('#back').textContent=mode==='host'?'全員でキャラクターを変えて再挑戦':'キャラクターを変えて再挑戦';
+  $('#disband').hidden=mode!=='host';
   $('#result').hidden=false;showHud(false);
   if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null}
   // 解放が増えたら、次の冒険から報酬候補に入るようホストへ伝える
