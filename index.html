@@ -1353,6 +1353,8 @@ function stepSim(S,inputs,dt){
     else if(S.mimic)for(const p of Object.values(S.players))makeOffer(S,p,true);
     S.ev.push({k:'clear',room:S.room,last,type:S.rtype});
   }
+  // 通信が途切れている人の報酬は自動で選び、買い物は閉じる（みんなを待たせない）
+  for(const p of Object.values(S.players))if(p.away){if(p.offer)chooseOffer(S,p,p.offerKind==='altar'?-1:Math.floor(Math.random()*p.offer.length));if(p.shop)closeShop(S,p)}
   if(S.cleared&&!S.doorOpen&&Object.values(S.players).every(p=>!p.offer&&!p.shop)){
     if(last){S.phase='win';S.endT=S.t;S.ev.push({k:'end',win:true});return}
     S.doorOpen=true;S.ev.push({k:'door',n:S.doors.length});
@@ -1360,7 +1362,8 @@ function stepSim(S,inputs,dt){
   const alive=alivePlayers(S);
   if(!alive.length){S.phase='lose';S.endT=S.t;S.ev.push({k:'end',win:false});return}
   if(S.doorOpen){
-    const at=alive.map(p=>p.x>W-WALL-30?S.doors.findIndex(d=>Math.abs(p.y-d.y)<DOOR):-1);
+    const here=alive.filter(p=>!p.away),goers=here.length?here:alive;
+    const at=goers.map(p=>p.x>W-WALL-30?S.doors.findIndex(d=>Math.abs(p.y-d.y)<DOOR):-1);
     if(at.every(i=>i>=0)){
       if(at.every(i=>i===at[0]))setupRoom(S,S.room+1,S.doors[at[0]].type);
       else if(S.t-(S.splitT||0)>3){S.splitT=S.t;S.ev.push({k:'split'})}
@@ -1453,7 +1456,7 @@ function hostRoom(){
   const code=String(1000+Math.floor(Math.random()*9000));
   peer=new Peer(PREFIX+code,{debug:0});
   clearInterval(hostWatch);hostWatch=setInterval(()=>{if(mode!=='host')return;
-    for(const id of Object.keys(members))if(id!=='p1'&&(S.phase==='lobby'||!conns[id]||!conns[id].open)&&Date.now()-(seen[id]||0)>60000)dropMember(id)},2000);
+    for(const id of Object.keys(members))if(id!=='p1'&&((S.phase!=='play'&&!conns[id])||Date.now()-(seen[id]||0)>(S.phase==='play'?180000:60000)))dropMember(id)},2000);
   peer.on('open',()=>{mode='host';MY='p1';roomCode=code;members={p1:{cls:myCls,unl:myUnl(),skin:mySkin(myCls)}};status('友達にコードを伝えてください');renderLobby()});
   peer.on('error',err=>{
     if(err.type==='unavailable-id'){peer.destroy();peer=null;hostRoom();return}
@@ -1461,15 +1464,16 @@ function hostRoom(){
   });
   peer.on('connection',conn=>{
     conn.on('open',()=>{
-      if(S.phase!=='lobby'){conn.send({t:'deny',why:'playing'});setTimeout(()=>conn.close(),400);return}
       const tok=conn.metadata&&conn.metadata.tok;
       let id=tok&&Object.keys(members).find(i=>i!=='p1'&&members[i].tok===tok);
-      if(id){const old=conns[id];conns[id]=null;try{old&&old.close()}catch(_){}}
+      if(!id&&S.phase!=='lobby'){conn.send({t:'deny',why:'playing'});setTimeout(()=>conn.close(),400);return}
+      if(id){const old=conns[id];conns[id]=null;try{old&&old.close()}catch(_){}delete lastSkillN[id];delete netInputs[id]}
       else id=['p2','p3','p4'].find(i=>!members[i]);
       if(!id){conn.send({t:'deny',why:'full'});setTimeout(()=>conn.close(),400);return}
       conns[id]=conn;members[id]={cls:members[id]&&members[id].cls||null,tok};seen[id]=Date.now();
       conn.on('data',d=>{if(conns[id]!==conn)return;seen[id]=Date.now();onHostData(id,d)});
-      conn.on('close',()=>{if(conns[id]===conn)dropMember(id)});
+      // 冒険の途中で切れたときは枠とキャラを残す（同じコードで入り直せば続きから）
+      conn.on('close',()=>{if(conns[id]!==conn)return;if(S.phase==='play'&&S.players[id])conns[id]=null;else dropMember(id)});
       conn.send({t:'welcome',id,code:roomCode});
       broadcastLobby();renderLobby();
     });
@@ -1485,6 +1489,7 @@ function dropMember(id){
 function onHostData(id,d){
   if(!d||typeof d!=='object')return;
   if(d.t==='in')netInputs[id]=d;
+  else if(d.t==='bye')dropMember(id);
   else if(d.t==='choose'&&S.phase==='play')chooseOffer(S,S.players[id],d.i|0);
   else if(d.t==='buy'&&S.phase==='play')buyItem(S,S.players[id],d.i==='heal'?'heal':d.i|0);
   else if(d.t==='shopClose'&&S.phase==='play')closeShop(S,S.players[id]);
@@ -1521,6 +1526,8 @@ function joinRoom(){
   peer.on('error',err=>{status(errMsg(err),true);if(mode!=='client'){resetNet();renderLobby()}else lostHost('通信が途切れました')});
 }
 function lostHost(msg){
+  const wasPlay=S.phase==='play';
+  if(wasPlay)msg+='。同じ部屋コードで「部屋に入る」と、冒険の続きに戻れます';
   resetNet();S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
   $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);renderLobby();status(msg,true);
 }
@@ -1562,7 +1569,7 @@ function buildClientView(){
 const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
 function packState(S){
   return{t:r1(S.t),phase:S.phase,room:S.room,asc:S.asc,anthemT:r2(S.anthemT||0),comboW:S.comboW?{t:r2(S.comboW.t),ids:S.comboW.ids}:null,region:S.region,fires:S.fires.map(f=>({x:r1(f.x),y:r1(f.y),r:f.r,t:r2(f.t),max:f.max})),shop:S.shop,altar:S.altar,trap:S.trap?{t:r1(S.trap.t)}:null,stats:S.stats,route:S.route,kingT:S.kingT,pickups:S.pickups.map(q=>({id:q.id,x:r1(q.x),y:r1(q.y),t:r2(q.t)})),pets:S.pets.map(q=>({id:q.id,owner:q.owner,x:r1(q.x),y:r1(q.y),perm:q.perm})),blasts:S.blasts.map(b=>({x:r1(b.x),y:r1(b.y),r:b.r,t:r2(b.t),max:b.max,kind:b.kind,ult:b.ult?1:0})),rtype:S.rtype,rname:S.rname,lay:S.lay,doors:S.doors,fountain:S.fountain,doorOpen:S.doorOpen,cleared:S.cleared,chest:S.chest,hazards:S.hazards.map(h=>({x:r1(h.x),y:r1(h.y),r:h.r,t:r2(h.t),max:h.max})),kills:S.kills,startT:S.startT,endT:S.endT,
-    players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r,skin:p.skin,ups:p.ups,item:p.item,offer:p.offer,smoke:r2(p.smoke),shield:p.shield,haste:r2(p.haste),guard:r2(p.guard),songT:r2(p.songT),songR:p.songR,dashT:r2(p.dashT),trapHits:p.trapHits||0,gold:p.gold,chill:r2(p.chill),shop:p.shop,offerKind:p.offerKind,ult:Math.floor(p.ult||0),whirl:r2(p.whirl||0),bulwark:r2(p.bulwark||0),frenzy:r2(p.frenzy||0)})),
+    players:Object.values(S.players).map(p=>({id:p.id,cls:p.cls,x:r1(p.x),y:r1(p.y),fx:r2(p.fx),fy:r2(p.fy),hp:p.hp,max:p.max,down:p.down,rev:r2(p.rev),iframe:r2(p.iframe),atkCd:r2(p.atkCd),skillCd:r2(p.skillCd),r:p.r,skin:p.skin,ups:p.ups,item:p.item,offer:p.offer,smoke:r2(p.smoke),shield:p.shield,haste:r2(p.haste),guard:r2(p.guard),songT:r2(p.songT),songR:p.songR,dashT:r2(p.dashT),trapHits:p.trapHits||0,gold:p.gold,chill:r2(p.chill),shop:p.shop,offerKind:p.offerKind,ult:Math.floor(p.ult||0),whirl:r2(p.whirl||0),bulwark:r2(p.bulwark||0),frenzy:r2(p.frenzy||0),away:p.away?1:0})),
     enemies:S.enemies.map(e=>({id:e.id,type:e.type,x:r1(e.x),y:r1(e.y),r:e.r,hp:e.hp,max:e.max,flash:r2(e.flash),state:e.state,timer:r2(e.timer),ax:r2(e.ax),ay:r2(e.ay),burn:e.burn>0?1:0,frozen:e.frozen>0?1:0,stun:e.stunT>0?1:0,sleep:e.sleep?1:0,slow:e.slow>0?1:0,boss:e.boss,elite:e.elite,name:e.name,phase:e.phase,atk:e.atk,wmax:e.wmax,inv:r2(e.inv)})),
     shots:S.shots.map(s=>({id:s.id,x:r1(s.x),y:r1(s.y),vx:r1(s.vx),vy:r1(s.vy),kind:s.kind,owner:s.owner,r:s.r,chill:s.chill?1:0})),
     zones:S.zones.map(z=>({x:r1(z.x),y:r1(z.y),r:z.r,life:r2(z.life)})),
@@ -1729,7 +1736,7 @@ $('#disband').addEventListener('click',()=>{
   bt.dataset.sure='';bt.textContent='解散する';broadcast({t:'disband'});
   const p=peer;peer=null;setTimeout(()=>{try{p&&p.destroy()}catch(_){}},600);
   conns={};toTitle('部屋を解散しました')});
-$('#quitRoom').addEventListener('click',()=>{if(mode==='client')toTitle('部屋を抜けました')});
+$('#quitRoom').addEventListener('click',()=>{if(mode!=='client')return;send(hostConn,{t:'bye'});const p=peer;peer=null;setTimeout(()=>{try{p&&p.destroy()}catch(_){}},500);toTitle('部屋を抜けました')});
 $('#back').addEventListener('click',()=>{
   S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
   $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);
@@ -1922,6 +1929,8 @@ function handleEvents(list){
       case'spark':sparks(v.x,v.y,v.kx,v.ky,'#bfae8f');break;
       case'spawn':burst(v.x,v.y,'#7a2a3a',14,140);break;
       case'left':banner(`${slotName(v.id)}が退出しました`,2);break;
+      case'away':if(v.id!==MY)toast(`${slotName(v.id)}の通信が途切れています（扉や報酬選びは待たずに進めます）`);break;
+      case'back':if(v.id!==MY)toast(`${slotName(v.id)}が戻ってきた`);break;
       case'room':if(RTYPE[v.type].hint)banner(`${v.name}<small>${RTYPE[v.type].hint}</small>`,2);break;
       case'wave':banner('敵の増援が来た！',1.4);break;
       case'split':banner('<small>全員で同じ扉に集まろう</small>',1.6);break;
@@ -2262,7 +2271,8 @@ function drawPlayer(p){
   if(p.shield>0){ctx.strokeStyle=`rgba(207,227,255,${.45+.2*Math.sin(time*6)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,p.r+7,0,Math.PI*2);ctx.stroke()}
   if(p.chill>0){ctx.strokeStyle='rgba(160,215,255,.8)';ctx.lineWidth=2;ctx.setLineDash([3,4]);ctx.beginPath();ctx.arc(p.x,p.y,p.r+5,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
     if(Math.random()<.2)parts.push({x:p.x+(Math.random()-.5)*24,y:p.y-10,vx:0,vy:30,life:.4,max:.4,color:'#dff3ff',size:2})}
-  if(p.offer||p.shop){ctx.fillStyle='#e2a243';ctx.font=`13px ${FONT}`;ctx.textAlign='center';ctx.fillText(p.shop?'買い物中…':'選択中…',p.x,p.y-p.r-26)}
+  if(p.away){ctx.fillStyle='#a8997f';ctx.font=`12px ${FONT}`;ctx.textAlign='center';ctx.fillText('通信待ち…',p.x,p.y-p.r-26)}
+  else if(p.offer||p.shop){ctx.fillStyle='#e2a243';ctx.font=`13px ${FONT}`;ctx.textAlign='center';ctx.fillText(p.shop?'買い物中…':'選択中…',p.x,p.y-p.r-26)}
 }
 function drawPet(q){const o=S.players[q.owner],bob=Math.sin(time*6+q.id)*3;
   ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(q.x,q.y+bob,2,q.x,q.y+bob,22);g.addColorStop(0,q.perm?'rgba(164,106,224,.5)':'rgba(200,160,255,.4)');g.addColorStop(1,'rgba(164,106,224,0)');
@@ -2459,6 +2469,8 @@ function loop(now){
       if(mode==='host')for(const id in netInputs){const ni=netInputs[id];if(!S.players[id])continue;
         if(lastSkillN[id]===undefined){lastSkillN[id]=ni.sn;lastItemN[id]=ni.iu;lastUltN[id]=ni.un}
         inp[id]={mx:clamp(+ni.mx||0,-1,1),my:clamp(+ni.my||0,-1,1),atk:!!ni.atk,skill:ni.sn!==lastSkillN[id],item:ni.iu!==lastItemN[id],ult:ni.un!==lastUltN[id]};lastSkillN[id]=ni.sn;lastItemN[id]=ni.iu;lastUltN[id]=ni.un}
+      if(mode==='host'){const now=Date.now();for(const id in S.players){if(id===MY)continue;const p=S.players[id];
+        const aw=!conns[id]||!conns[id].open||now-(seen[id]||0)>8000;if(aw!==!!p.away){p.away=aw;S.ev.push({k:aw?'away':'back',id})}if(aw)inp[id]={}}}
       const slow=S.slowmo>0;if(slow)S.slowmo-=dt;
       stepSim(S,inp,slow?dt*.3:dt);
     }
