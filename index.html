@@ -92,6 +92,10 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
 .net h2{margin-top:18px}
 .netrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .netrow .or{font-size:12px;color:var(--muted)}
+.quickrow{margin-bottom:12px}
+.quickrow .note{flex:1;min-width:200px}
+.net .sep{margin:4px 0 6px;color:var(--torch)}
+.bigcode.pub{font-size:22px;letter-spacing:.06em}
 .code{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .code input{font:inherit;font-size:18px;width:5.2em;letter-spacing:.2em;color:var(--ink);background:rgba(0,0,0,.4);
   border:1px solid var(--line);border-radius:4px;padding:7px 8px;text-align:center}
@@ -268,18 +272,23 @@ body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink
 
       <div id="netBox" class="net">
         <h2>遊び方</h2>
+        <div class="netrow quickrow">
+          <button class="btn" id="quick">すぐ遊ぶ（ランダムマッチ）</button>
+          <span class="note">いま待っている人の部屋に自動で入ります。だれもいなければ部屋を作って待ちます</span>
+        </div>
+        <div class="note sep">友達だけで遊ぶとき（部屋コード）</div>
         <div class="netrow">
           <button class="btn ghost" id="host">部屋を作る</button>
           <span class="or">または</span>
           <label class="code"><span>部屋コード</span><input id="code" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="1234"></label>
           <button class="btn ghost" id="join">部屋に入る</button>
         </div>
-        <div class="note">何もしなければ1人で遊べます。友達と遊ぶときは1人が「部屋を作る」、他の人は表示された4桁のコードで入ります。</div>
+        <div class="note">1人が「部屋を作る」、他の人は表示された4桁のコードで入ります。何もしなければ1人で遊べます。</div>
       </div>
 
       <div id="roomBox" class="roombox" hidden>
         <div class="roomhead">
-          <div><span class="note">部屋コード</span><div class="bigcode" id="roomCode">----</div></div>
+          <div><span class="note" id="roomLabel">部屋コード</span><div class="bigcode" id="roomCode">----</div></div>
           <button class="btn ghost small" id="leave">部屋を出る</button>
         </div>
         <ol class="members" id="members"></ol>
@@ -1442,24 +1451,29 @@ function peerReady(){
   if(typeof Peer==='undefined'){status('通信の部品を読み込めませんでした。公開版（GitHub Pages）で開いてください',true);return false}
   return true;
 }
-function joinDone(){joining=false;const j=$('#join'),h=$('#host');if(j)j.disabled=false;if(h)h.disabled=false}
+function setNetBusy(b){for(const k of['#join','#host','#quick']){const e=$(k);if(e)e.disabled=b}}
+function joinDone(){joining=false;setNetBusy(false)}
 function resetNet(){
   joinDone();clearInterval(pingTimer);clearInterval(hostWatch);
   try{peer&&peer.destroy()}catch(_){}
   peer=null;hostConn=null;conns={};members={};roomCode='';netInputs={};lastSkillN={};evQueue=[];snapA=snapB=null;
-  mode='solo';MY='p1';
+  mode='solo';MY='p1';isPub=false;
 }
 
-function hostRoom(){
+// pub：ランダムマッチ用の部屋番号（1〜PUB_N）。taken：その番号が先に取られていたときの処理
+function hostRoom(pub,taken){
   if(!peerReady()||mode!=='solo')return;
-  status('部屋を作っています…');
-  const code=String(1000+Math.floor(Math.random()*9000));
+  if(!pub&&joining)return;
+  status(pub?'待っている人がいないので、部屋を作って待ちます…':'部屋を作っています…');
+  const code=pub?'pub-'+pub:String(1000+Math.floor(Math.random()*9000));
   peer=new Peer(PREFIX+code,{debug:0});
   clearInterval(hostWatch);hostWatch=setInterval(()=>{if(mode!=='host')return;
     for(const id of Object.keys(members))if(id!=='p1'&&((S.phase!=='play'&&!conns[id])||Date.now()-(seen[id]||0)>(S.phase==='play'?180000:60000)))dropMember(id)},2000);
-  peer.on('open',()=>{mode='host';MY='p1';roomCode=code;members={p1:{cls:myCls,unl:myUnl(),skin:mySkin(myCls)}};status('友達にコードを伝えてください');renderLobby()});
+  peer.on('open',()=>{joinDone();mode='host';MY='p1';roomCode=code;isPub=!!pub;if(pub)rememberPub(pub);members={p1:{cls:myCls,unl:myUnl(),skin:mySkin(myCls)}};
+    status(pub?'ほかの人が「すぐ遊ぶ」を押すと、この部屋に入ってきます。そろったら出発しましょう':'友達にコードを伝えてください');renderLobby()});
   peer.on('error',err=>{
-    if(err.type==='unavailable-id'){peer.destroy();peer=null;hostRoom();return}
+    if(err.type==='unavailable-id'){peer.destroy();peer=null;if(pub){taken&&taken();return}hostRoom();return}
+    if(pub&&mode!=='host'){joinDone()}
     status(errMsg(err),true);if(mode!=='host'){resetNet();renderLobby()}
   });
   peer.on('connection',conn=>{
@@ -1474,7 +1488,7 @@ function hostRoom(){
       conn.on('data',d=>{if(conns[id]!==conn)return;seen[id]=Date.now();onHostData(id,d)});
       // 冒険の途中で切れたときは枠とキャラを残す（同じコードで入り直せば続きから）
       conn.on('close',()=>{if(conns[id]!==conn)return;if(S.phase==='play'&&S.players[id])conns[id]=null;else dropMember(id)});
-      conn.send({t:'welcome',id,code:roomCode});
+      conn.send({t:'welcome',id,code:roomCode,pub:isPub});
       broadcastLobby();renderLobby();
     });
   });
@@ -1515,7 +1529,7 @@ function joinRoom(){
   if(!peerReady()||mode!=='solo'||joining)return;
   const code=($('#code').value||'').replace(/\D/g,'');
   if(code.length!==4){status('4桁の部屋コードを入力してください',true);return}
-  status('部屋を探しています…');joining=true;$('#join').disabled=true;$('#host').disabled=true;
+  status('部屋を探しています…');joining=true;setNetBusy(true);
   peer=new Peer({debug:0});
   peer.on('open',()=>{
     hostConn=peer.connect(PREFIX+code,{reliable:true,metadata:{tok:MY_TOK}});
@@ -1525,15 +1539,49 @@ function joinRoom(){
   });
   peer.on('error',err=>{status(errMsg(err),true);if(mode!=='client'){resetNet();renderLobby()}else lostHost('通信が途切れました')});
 }
+const PUB_N=12;let isPub=false;
+function rememberPub(i){try{sessionStorage.setItem('dd-lastpub',String(i))}catch(_){}}
+// 部屋番号の小さい順に「入れる部屋」を探す。空き番号が続いたら、いちばん小さい空き番号で部屋を作る
+function quickPlay(retry){
+  if(!peerReady()||mode!=='solo'||(joining&&!retry))return;
+  joining=true;setNetBusy(true);status('遊べる部屋を探しています…');
+  let last=0;try{last=+sessionStorage.getItem('dd-lastpub')||0}catch(_){}
+  const order=[];if(last)order.push(last);for(let i=1;i<=PUB_N;i++)if(i!==last)order.push(i);
+  const probe=new Peer({debug:0});peer=probe;
+  let cur=-1,conn=null,timer=null,settled=false,empty=null,emptyRun=0;
+  const finish=()=>{clearTimeout(timer);settled=true};
+  const claim=()=>{finish();try{probe.destroy()}catch(_){}peer=null;
+    if(retry>=3){joinDone();status('部屋が見つかりませんでした。もう一度押してください',true);return}
+    hostRoom(empty||1,()=>{status('遊べる部屋を探しています…');quickPlay((retry||0)+1)})};
+  const next=()=>{clearTimeout(timer);if(settled)return;cur++;
+    if(cur>=order.length||emptyRun>=3){claim();return}
+    const i=order[cur];
+    const c=probe.connect(PREFIX+'pub-'+i,{reliable:true,metadata:{tok:MY_TOK}});conn=c;c.pubI=i;
+    timer=setTimeout(()=>{if(conn!==c)return;conn=null;try{c.close()}catch(_){}miss(i)},5000);
+    c.on('data',d=>{
+      if(!settled&&conn===c&&d&&d.t==='deny'){clearTimeout(timer);conn=null;emptyRun=0;try{c.close()}catch(_){}next();return}
+      if(!settled&&conn===c&&d&&d.t==='welcome'){finish();hostConn=c;rememberPub(i);
+        c.on('close',()=>{if(mode==='client'&&hostConn===c)lostHost('ホストとの接続が切れました')})}
+      if(hostConn===c)onClientData(d)});
+    c.on('error',()=>{});
+  };
+  // その番号の部屋がない
+  const miss=i=>{if(empty==null||i<empty)empty=i;emptyRun++;next()};
+  probe.on('open',next);
+  probe.on('error',err=>{
+    if(settled){if(mode==='client')lostHost('通信が途切れました');return}
+    if(err.type==='peer-unavailable'&&conn){const i=conn.pubI;clearTimeout(timer);conn=null;miss(i);return}
+    finish();status(errMsg(err),true);resetNet();renderLobby()});
+}
 function lostHost(msg){
   const wasPlay=S.phase==='play';
-  if(wasPlay)msg+='。同じ部屋コードで「部屋に入る」と、冒険の続きに戻れます';
+  if(wasPlay)msg+=isPub?'。もう一度「すぐ遊ぶ」を押すと、冒険の続きに戻れます':'。同じ部屋コードで「部屋に入る」と、冒険の続きに戻れます';
   resetNet();S=createSim();setupRoom(S,0,'battle');S.ev.length=0;
   $('#result').hidden=true;$('#lobby').hidden=false;showHud(false);renderLobby();status(msg,true);
 }
 function onClientData(d){
   if(!d||typeof d!=='object')return;
-  if(d.t==='welcome'){joinDone();clearInterval(pingTimer);pingTimer=setInterval(()=>{if(mode==='client'&&hostConn)send(hostConn,{t:'ping'});else clearInterval(pingTimer)},2000);mode='client';MY=d.id;roomCode=d.code;members={};status('部屋に入りました。職業を選んでください');
+  if(d.t==='welcome'){joinDone();isPub=!!d.pub;clearInterval(pingTimer);pingTimer=setInterval(()=>{if(mode==='client'&&hostConn)send(hostConn,{t:'ping'});else clearInterval(pingTimer)},2000);mode='client';MY=d.id;roomCode=d.code;members={};status('部屋に入りました。職業を選んでください');
     sendPick();renderLobby()}
   else if(d.t==='disband'){toTitle('ホストが部屋を解散しました');return}
   else if(d.t==='deny'){joinDone();const w=d.why==='full'?'その部屋は満員です（最大4人）':'その部屋はもう出発しています';resetNet();renderLobby();status(w,true)}
@@ -1698,7 +1746,7 @@ function setAsc(v){if(mode==='client')return;ascSel=Math.max(0,Math.min(ascMaxOp
 function renderLobby(){
   const inRoom=mode!=='solo';
   $('#netBox').hidden=inRoom;$('#roomBox').hidden=!inRoom;
-  $('#roomCode').textContent=roomCode||'----';
+  $('#roomCode').textContent=isPub?'ランダムマッチ':(roomCode||'----');$('#roomCode').classList.toggle('pub',isPub);$('#roomLabel').textContent=isPub?'部屋の種類':'部屋コード';
   const ul=$('#members');ul.innerHTML='';
   for(const id of['p1','p2','p3','p4']){const m=members[id];const li=document.createElement('li');
     if(!m){li.className='empty';li.innerHTML=`<span class="dot"></span><span class="slot">${slotName(id)}</span>空き`}
@@ -1722,8 +1770,9 @@ function renderLobby(){
     go.disabled=!ready;go.textContent=`出発する（${n}人）`;note.textContent=ready?'全員そろったら出発しましょう':'全員の職業が決まるのを待っています'}
   else{go.hidden=false;go.disabled=false;go.textContent='出発する';note.textContent='地域は毎回変わります。8つの部屋を進み、最奥のボスを倒せば踏破です'}
 }
-$('#host').addEventListener('click',hostRoom);
+$('#host').addEventListener('click',()=>hostRoom());
 $('#join').addEventListener('click',joinRoom);
+$('#quick').addEventListener('click',()=>quickPlay(0));
 $('#leave').addEventListener('click',()=>{resetNet();renderLobby();status('部屋を出ました')});
 $('#go').addEventListener('click',start);
 $('#again').addEventListener('click',start);
