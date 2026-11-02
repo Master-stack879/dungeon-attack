@@ -1448,7 +1448,7 @@ function hostRoom(){
   const code=String(1000+Math.floor(Math.random()*9000));
   peer=new Peer(PREFIX+code,{debug:0});
   clearInterval(hostWatch);hostWatch=setInterval(()=>{if(mode!=='host')return;
-    for(const id of Object.keys(members))if(id!=='p1'&&(S.phase==='lobby'||!conns[id]||!conns[id].open)&&Date.now()-(seen[id]||0)>20000)dropMember(id)},2000);
+    for(const id of Object.keys(members))if(id!=='p1'&&(S.phase==='lobby'||!conns[id]||!conns[id].open)&&Date.now()-(seen[id]||0)>60000)dropMember(id)},2000);
   peer.on('open',()=>{mode='host';MY='p1';roomCode=code;members={p1:{cls:myCls,unl:myUnl(),skin:mySkin(myCls)}};status('友達にコードを伝えてください');renderLobby()});
   peer.on('error',err=>{
     if(err.type==='unavailable-id'){peer.destroy();peer=null;hostRoom();return}
